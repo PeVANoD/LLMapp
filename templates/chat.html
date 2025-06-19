@@ -10,6 +10,12 @@
             padding: 20px;
             background-color: #f5f5f5;
         }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
         .chat-container {
             background-color: white;
             border-radius: 8px;
@@ -54,7 +60,6 @@
         }
         button {
             padding: 12px 24px;
-            background: #4CAF50;
             color: white;
             border: none;
             border-radius: 6px;
@@ -62,8 +67,17 @@
             font-size: 16px;
             transition: background 0.3s;
         }
-        button:hover {
+        #send-button {
+            background: #4CAF50;
+        }
+        #send-button:hover {
             background: #45a049;
+        }
+        #back-button {
+            background: #2196F3;
+        }
+        #back-button:hover {
+            background: #0b7dda;
         }
         button:disabled {
             background: #cccccc;
@@ -123,7 +137,10 @@
     </style>
 </head>
 <body>
-    <h1>Chat #{{ chat_id }}</h1>
+    <div class="header">
+        <h1>Chat #{{ chat_id }}</h1>
+        <button id="back-button" onclick="goBack()">Back to Chats</button>
+    </div>
     
     <div class="chat-container" id="messages">
         {% for msg in history %}
@@ -149,6 +166,11 @@
                 sendMessage();
             }
         });
+
+        // Функция возврата к списку чатов
+        function goBack() {
+            window.location.href = "/chats";
+        }
 
         async function sendMessage() {
             const message = messageInput.value.trim();
