@@ -134,12 +134,70 @@
             margin: 10px 0;
             border-radius: 4px;
         }
+        .chat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .chat-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .chat-name {
+            font-size: 1.5em;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        
+        .chat-name:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .chat-name-input {
+            font-size: 1.5em;
+            padding: 5px;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            width: 300px;
+            display: none;
+        }
+        
+        .save-name-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: none;
+        }
+        
+        .editing .chat-name {
+            display: none;
+        }
+        
+        .editing .chat-name-input,
+        .editing .save-name-btn {
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Chat #{{ chat_id }}</h1>
-        <button id="back-button" onclick="goBack()">Back to Chats</button>
+    <div class="chat-header">
+        <div class="chat-title">
+            <span class="chat-name" id="chat-name">{{ chat_name or chat_id[:8] }}</span>
+            <input type="text" class="chat-name-input" id="chat-name-input" value="{{ chat_name or chat_id[:8] }}">
+            <button class="save-name-btn" id="save-name-btn">Save</button>
+        </div>
+        <a href="/chats" class="action-btn back-btn">← Back to Chats</a>
     </div>
     
     <div class="chat-container" id="messages">
@@ -156,91 +214,160 @@
     </div>
 
     <script>
-        const chatId = "{{ chat_id }}";
-        const sendButton = document.getElementById('send-button');
-        const messageInput = document.getElementById('message-input');
-
-        // Обработка нажатия Enter
-        messageInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendMessage();
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatId = "{{ chat_id }}";
+            const sendButton = document.getElementById('send-button');
+            const messageInput = document.getElementById('message-input');
+            const chatNameElement = document.getElementById('chat-name');
+            const chatNameInput = document.getElementById('chat-name-input');
+            const saveNameBtn = document.getElementById('save-name-btn');
+            const chatTitle = document.querySelector('.chat-title');
+    
+            // ===== Функции для работы с сообщениями =====
+            // Обработка нажатия Enter в поле сообщения
+            messageInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !chatTitle.classList.contains('editing')) {
+                    sendMessage();
+                }
+            });
+    
+            // Назначение обработчика на кнопку Send
+            sendButton.addEventListener('click', function() {
+                if (!chatTitle.classList.contains('editing')) {
+                    sendMessage();
+                }
+            });
+    
+            async function sendMessage() {
+                const message = messageInput.value.trim();
+                if (!message) return;
+    
+                // Блокируем кнопку и поле ввода на время обработки
+                sendButton.disabled = true;
+                messageInput.disabled = true;
+                sendButton.innerHTML = 'Sending <span class="dot-flashing"></span>';
+    
+                // Добавляем сообщение пользователя
+                addMessage("user", message);
+                messageInput.value = "";
+    
+                try {
+                    const response = await fetch(`/api/chats/${chatId}/messages`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            model: "local-model"
+                        })
+                    });
+    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Server returned an error');
+                    }
+    
+                    const data = await response.json();
+                    
+                    if (!data.response) {
+                        throw new Error('Empty response from server');
+                    }
+                    
+                    addMessage("assistant", data.response);
+                } catch (error) {
+                    console.error("Error:", error);
+                    showError(error.message);
+                } finally {
+                    // Разблокируем кнопку и поле ввода
+                    sendButton.disabled = false;
+                    messageInput.disabled = false;
+                    sendButton.textContent = 'Send';
+                    messageInput.focus();
+                }
+            }
+    
+            function addMessage(role, content) {
+                const messagesDiv = document.getElementById("messages");
+                const msgElement = document.createElement("div");
+                msgElement.className = `message ${role}-message`;
+                
+                // Сохраняем переносы строк и форматирование
+                msgElement.innerHTML = content.replace(/\n/g, '<br>');
+                
+                messagesDiv.appendChild(msgElement);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+    
+            function showError(message) {
+                const messagesDiv = document.getElementById("messages");
+                const errorElement = document.createElement("div");
+                errorElement.className = "error-message";
+                errorElement.textContent = `Error: ${message}`;
+                messagesDiv.appendChild(errorElement);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+    
+            // ===== Функции для переименования чата =====
+            // Редактирование названия чата
+            chatNameElement.addEventListener('click', function() {
+                chatTitle.classList.add('editing');
+                chatNameInput.focus();
+            });
+            
+            // Сохранение названия по кнопке
+            saveNameBtn.addEventListener('click', saveChatName);
+            
+            // Сохранение названия по Enter
+            chatNameInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    saveChatName();
+                }
+            });
+            
+            // Отмена при клике вне поля
+            document.addEventListener('click', function(e) {
+                if (!chatTitle.contains(e.target) && chatTitle.classList.contains('editing')) {
+                    cancelEditing();
+                }
+            });
+            
+            async function saveChatName() {
+                const newName = chatNameInput.value.trim();
+                if (!newName) {
+                    alert('Chat name cannot be empty');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/api/chats/${chatId}/rename`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ new_name: newName })
+                    });
+                    
+                    if (response.ok) {
+                        chatNameElement.textContent = newName;
+                        cancelEditing();
+                        // Обновляем title страницы
+                        document.title = `Chat: ${newName}`;
+                    } else {
+                        const error = await response.json();
+                        alert(`Error: ${error.detail}`);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Failed to rename chat');
+                }
+            }
+            
+            function cancelEditing() {
+                chatTitle.classList.remove('editing');
+                chatNameInput.value = chatNameElement.textContent;
             }
         });
-
-        // Функция возврата к списку чатов
-        function goBack() {
-            window.location.href = "/chats";
-        }
-
-        async function sendMessage() {
-            const message = messageInput.value.trim();
-            if (!message) return;
-
-            // Блокируем кнопку и поле ввода на время обработки
-            sendButton.disabled = true;
-            messageInput.disabled = true;
-            sendButton.innerHTML = 'Sending <span class="dot-flashing"></span>';
-
-            // Добавляем сообщение пользователя
-            addMessage("user", message);
-            messageInput.value = "";
-
-            try {
-                const response = await fetch(`/api/chats/${chatId}/messages`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        message: message,
-                        model: "local-model"  // Используем фиксированное имя для LM Studio
-                    })
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'Server returned an error');
-                }
-
-                const data = await response.json();
-                
-                if (!data.response) {
-                    throw new Error('Empty response from server');
-                }
-                
-                addMessage("assistant", data.response);
-            } catch (error) {
-                console.error("Error:", error);
-                showError(error.message);
-            } finally {
-                // Разблокируем кнопку и поле ввода
-                sendButton.disabled = false;
-                messageInput.disabled = false;
-                sendButton.textContent = 'Send';
-                messageInput.focus();
-            }
-        }
-
-        function addMessage(role, content) {
-            const messagesDiv = document.getElementById("messages");
-            const msgElement = document.createElement("div");
-            msgElement.className = `message ${role}-message`;
-            
-            // Сохраняем переносы строк и форматирование
-            msgElement.innerHTML = content.replace(/\n/g, '<br>');
-            
-            messagesDiv.appendChild(msgElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-
-        function showError(message) {
-            const messagesDiv = document.getElementById("messages");
-            const errorElement = document.createElement("div");
-            errorElement.className = "error-message";
-            errorElement.textContent = `Error: ${message}`;
-            messagesDiv.appendChild(errorElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
     </script>
 </body>
 </html>

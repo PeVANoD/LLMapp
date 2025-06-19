@@ -20,39 +20,100 @@
             padding: 0;
         }
         .chat-item {
-            padding: 15px;
+            padding: 20px;
             border: 1px solid #ddd;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             border-radius: 5px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            min-height: 60px;
         }
         .chat-item:hover {
             background-color: #f5f5f5;
+        }
+        .chat-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .chat-name-container {
+            position: relative;
+            display: inline-block;
+        }
+        .chat-name {
+            font-weight: bold;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 1.1em;
+            background-color: #f0f8ff;
+            border: 1px solid #d0e0f0;
+            transition: all 0.2s ease;
+        }
+        .chat-name:hover {
+            background-color: #e0f0ff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .chat-name-input {
+            position: absolute;
+            left: 0;
+            bottom: -6px;
+            width: 200px;
+            padding: 8px 12px;
+            border: 2px solid #4CAF50;
+            border-radius: 4px;
+            font-size: 1.1em;
+            z-index: 10;
+            display: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .save-rename-btn:hover {
+            background: #45a049;
+        }
+        .editing .chat-name {
+            visibility: hidden;
+        }
+        .editing .chat-name-input,
+        .editing .save-rename-btn {
+            display: inline-block;
         }
         .chat-actions {
             display: flex;
             gap: 10px;
         }
+        .chat-meta {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 8px;
+        }
+        
         /* Унифицированные стили для всех кнопок */
         .btn {
             color: white;
             border: none;
-            padding: 8px 8px;
+            padding: 8px 16px;
             border-radius: 4px;
             cursor: pointer;
             text-decoration: none;
             font-size: 14px;
             text-align: center;
             display: inline-block;
-            min-width: 80px; /* Минимальная ширина для всех кнопок */
+            min-width: 80px;
+            transition: background 0.2s ease;
         }
         .continue-btn {
             background: #4CAF50;
         }
+        .continue-btn:hover {
+            background: #45a049;
+        }
         .delete-btn {
             background: #f44336;
+        }
+        .delete-btn:hover {
+            background: #d32f2f;
         }
         .action-btn {
             width: 100%;
@@ -61,8 +122,14 @@
         .new-chat-btn {
             background: #2196F3;
         }
+        .new-chat-btn:hover {
+            background: #0b7dda;
+        }
         .back-btn {
             background: #FF9800;
+        }
+        .back-btn:hover {
+            background: #e68a00;
         }
         .buttons-container {
             display: flex;
@@ -77,6 +144,24 @@
         .buttons-container form button {
             width: 100%;
         }
+        .save-rename-btn {
+            position: absolute;
+            left: 230px;
+            top: -9px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: none;
+            z-index: 11;
+            font-weight: bold;
+            transition: background 0.2s ease;
+        }
+        .editing .save-rename-btn {
+            display: inline-block; /* Показывается только при редактировании */
+        }
     </style>
 </head>
 <body>
@@ -84,15 +169,20 @@
         <h1>My Chats</h1>
     </div>
     
-    <ul class="chat-list">
+    <ul class="chat-list" id="chat-list">
         {% for chat in chats %}
-        <li class="chat-item">
+        <li class="chat-item" data-chat-id="{{ chat.chat_id }}">
             <div>
-                <h3>Chat #{{ chat.chat_id[:8] }}...</h3>
-                <small>
-                    Created: {{ chat.created_at }} | 
-                    Messages: {{ chat.message_count }}
-                </small>
+                <div class="chat-header">
+                    <div class="chat-name-container">
+                        <span class="chat-name">{{ chat.name or chat.chat_id[:8] }}</span>
+                        <input type="text" class="chat-name-input" value="{{ chat.name or chat.chat_id[:8] }}">
+                        <button class="save-rename-btn btn">OK</button>
+                    </div>
+                </div>
+                <div class="chat-meta">
+                    Created: {{ chat.created_at }} | Messages: {{ chat.message_count }}
+                </div>
             </div>
             <div class="chat-actions">
                 <a href="/chat/{{ chat.chat_id }}" class="btn continue-btn">Continue</a>
@@ -110,5 +200,80 @@
             <button type="submit" class="btn action-btn new-chat-btn">+ New Chat</button>
         </form>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatItems = document.querySelectorAll('.chat-item');
+            
+            chatItems.forEach(item => {
+                const chatId = item.dataset.chatId;
+                const nameContainer = item.querySelector('.chat-name-container');
+                const nameElement = item.querySelector('.chat-name');
+                const inputElement = item.querySelector('.chat-name-input');
+                const saveBtn = item.querySelector('.save-rename-btn');
+                
+                // Один клик для переименования
+                nameElement.addEventListener('click', function() {
+                    nameContainer.classList.add('editing');
+                    inputElement.focus();
+                    inputElement.select(); // Выделяем весь текст
+                });
+                
+                // Сохранение по кнопке OK
+                saveBtn.addEventListener('click', async function() {
+                    await saveChatName();
+                });
+                
+                // Сохранение по Enter
+                inputElement.addEventListener('keypress', async function(e) {
+                    if (e.key === 'Enter') {
+                        await saveChatName();
+                    }
+                });
+                
+                // Отмена по клику вне поля
+                document.addEventListener('click', function(e) {
+                    if (!nameContainer.contains(e.target) && nameContainer.classList.contains('editing')) {
+                        cancelEditing();
+                    }
+                });
+                
+                async function saveChatName() {
+                    const newName = inputElement.value.trim();
+                    if (!newName) {
+                        alert('Имя чата не может быть пустым');
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch(`/api/chats/${chatId}/rename`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ new_name: newName })
+                        });
+                        
+                        if (response.ok) {
+                            nameElement.textContent = newName;
+
+                            cancelEditing();
+                        } else {
+                            const error = await response.json();
+                            alert(`Ошибка: ${error.detail}`);
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        alert('Ошибка соединения');
+                    }
+                }
+                
+                function cancelEditing() {
+                    nameContainer.classList.remove('editing');
+                    inputElement.value = nameElement.textContent;
+                }           
+            });
+        });
+    </script>
 </body>
 </html>

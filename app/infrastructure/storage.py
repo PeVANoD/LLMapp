@@ -32,6 +32,13 @@ class SQLiteChatStorage(IChatStorage):
                     FOREIGN KEY(chat_id) REFERENCES chats(chat_id)
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS chat_names (
+                    chat_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    FOREIGN KEY(chat_id) REFERENCES chats(chat_id)
+                )
+            """)
             conn.commit()
 
     def create_chat(self) -> str:
@@ -75,25 +82,55 @@ class SQLiteChatStorage(IChatStorage):
         pass  # SQLite loads automatically
 
     def get_all_chats(self) -> List[Dict]:
+        """Получение всех чатов с именами"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-            SELECT 
-                chats.chat_id, 
-                chats.created_at,
-                COUNT(messages.id) as message_count
-                FROM chats
-                LEFT JOIN messages ON chats.chat_id = messages.chat_id
-                GROUP BY chats.chat_id
-                ORDER BY chats.created_at DESC
+                SELECT 
+                    c.chat_id, 
+                    datetime(c.created_at, 'localtime') as created_at,
+                    COUNT(m.id) as message_count,
+                    cn.name
+                FROM chats c
+                LEFT JOIN messages m ON c.chat_id = m.chat_id
+                LEFT JOIN chat_names cn ON c.chat_id = cn.chat_id
+                GROUP BY c.chat_id
+                ORDER BY c.created_at DESC
             """)
             return [
                 {
                     "chat_id": row[0],
                     "created_at": row[1],
-                    "message_count": row[2]
+                    "message_count": row[2],
+                    "name": row[3]  # Может быть None, если имя не задано
                 }
                 for row in cursor.fetchall()
             ]
+        
+    def rename_chat(self, chat_id: str, new_name: str) -> None:
+        """Переименование чата"""
+        if not new_name.strip():
+            raise ValueError("Имя чата не может быть пустым")
+        
+        with sqlite3.connect(self.db_path) as conn:
+            # Проверяем существование чата
+            cursor = conn.execute("SELECT 1 FROM chats WHERE chat_id = ?", (chat_id,))
+            if not cursor.fetchone():
+                raise ValueError(f"Чат {chat_id} не найден")
+            
+            # Обновляем или добавляем имя
+            conn.execute("""
+                INSERT OR REPLACE INTO chat_names (chat_id, name)
+                VALUES (?, ?)
+            """, (chat_id, new_name.strip()))
+            conn.commit()
+
+    def get_chat_name(self, chat_id: str) -> str:
+    #"""Получаем имя чата (возвращает None если имя не задано)"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT name FROM chat_names WHERE chat_id = ?", (chat_id,))
+            result = cursor.fetchone()
+            return result[0] if result else None
+
 
 class FileStorage(IFileStorage):
     def __init__(self, storage_dir: str = "file_storage"):
@@ -117,3 +154,6 @@ class FileStorage(IFileStorage):
         filepath = os.path.join(self.storage_dir, filename)
         if os.path.exists(filepath):
             os.remove(filepath)
+
+
+

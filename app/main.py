@@ -58,13 +58,22 @@ class MessageRequest(BaseModel):
 async def root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+import sqlite3
 @app.get("/chats", response_class=HTMLResponse)
 async def list_chats(request: Request, storage: IChatStorage = Depends(get_chat_storage)):
-    chats = storage.get_all_chats()
-    return templates.TemplateResponse(
-        "chats_list.html",
-        {"request": request, "chats": chats}
-    )
+    """Страница со списком всех чатов"""
+    try:
+        chats = storage.get_all_chats()
+        return templates.TemplateResponse(
+            "chats_list.html",
+            {"request": request, "chats": chats}
+        )
+    except sqlite3.OperationalError as e:
+        logger.error(f"Database error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Database error. Please try again later."
+        )
 
 @app.post("/chats/new", response_class=RedirectResponse)
 async def create_new_chat(storage: IChatStorage = Depends(get_chat_storage)):
@@ -85,10 +94,18 @@ async def get_chat_page(
     chat_id: str,
     storage: IChatStorage = Depends(get_chat_storage)
 ):
+    """Страница чата с названием"""
     history = storage.get_history(chat_id)
+    chat_name = storage.get_chat_name(chat_id)
+    
     return templates.TemplateResponse(
         "chat.html",
-        {"request": request, "chat_id": chat_id, "history": history}
+        {
+            "request": request,
+            "chat_id": chat_id,
+            "chat_name": chat_name if chat_name != chat_id[:8] else None,
+            "history": history
+        }
     )
 
 @app.post("/api/chats/{chat_id}/messages")
@@ -133,3 +150,34 @@ async def post_message_to_chat(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+class RenameChatRequest(BaseModel):
+    new_name: str
+
+@app.post("/api/chats/{chat_id}/rename")
+async def rename_chat(
+    chat_id: str,
+    request: RenameChatRequest,
+    storage: IChatStorage = Depends(get_chat_storage)
+):
+    """Эндпоинт для переименования чата"""
+    try:
+        storage.rename_chat(chat_id, request.new_name)
+        return {"status": "success", "new_name": request.new_name}
+    except ValueError as e:
+        # Ошибки валидации (пустое имя, чат не найден)
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Ошибка переименования чата {chat_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Внутренняя ошибка сервера при переименовании чата"
+        )
+
+@app.get("/api/chats/{chat_id}/name")
+async def get_chat_name(
+    chat_id: str,
+    storage: IChatStorage = Depends(get_chat_storage)
+):
+    return {"name": storage.get_chat_name(chat_id)}
