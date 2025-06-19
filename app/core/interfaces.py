@@ -8,9 +8,6 @@ class ILLMClient(ABC):
     def generate_response(self, messages: List[Dict], model: str) -> str:
         pass
 
-    @abstractmethod
-    def generate_response_with_image(self, messages: List[Dict], image: Image.Image, model: str) -> str:
-        pass
 
 class IEmbeddingService(ABC):
     @abstractmethod

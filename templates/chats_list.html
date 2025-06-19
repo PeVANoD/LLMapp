@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Chats</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .chat-list {
+            list-style: none;
+            padding: 0;
+        }
+        .chat-item {
+            padding: 15px;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-item:hover {
+            background-color: #f5f5f5;
+        }
+        .chat-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .continue-btn {
+            background: #4CAF50;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            text-decoration: none;
+        }
+        .delete-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .new-chat-btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>My Chats</h1>
+    
+    <ul class="chat-list">
+        {% for chat in chats %}
+        <li class="chat-item">
+            <div>
+                <h3>Chat #{{ chat.chat_id[:8] }}...</h3>
+                <small>
+                    Created: {{ chat.created_at }} | 
+                    Messages: {{ chat.message_count }}
+                </small>
+            </div>
+            <div class="chat-actions">
+                <a href="/chat/{{ chat.chat_id }}" class="continue-btn">Continue</a>
+                <form action="/chats/{{ chat.chat_id }}/delete" method="POST">
+                    <button type="submit" class="delete-btn">Delete</button>
+                </form>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+
+    <form action="/chats/new" method="POST">
+        <button type="submit" class="new-chat-btn">+ New Chat</button>
+    </form>
+</body>
+</html>

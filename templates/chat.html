@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat #{{ chat_id }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .chat-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            height: 70vh;
+            overflow-y: auto;
+        }
+        .message {
+            margin: 15px 0;
+            padding: 12px 15px;
+            border-radius: 8px;
+            line-height: 1.5;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: auto;
+            border-bottom-right-radius: 0;
+        }
+        .assistant-message {
+            background-color: #f1f1f1;
+            margin-right: auto;
+            border-bottom-left-radius: 0;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            padding: 12px 24px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        .loading-indicator {
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .dot-flashing {
+            position: relative;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: #4CAF50;
+            animation: dotFlashing 1s infinite linear alternate;
+            animation-delay: 0.5s;
+        }
+        .dot-flashing::before, .dot-flashing::after {
+            content: '';
+            display: inline-block;
+            position: absolute;
+            top: 0;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: #4CAF50;
+        }
+        .dot-flashing::before {
+            left: -15px;
+            animation: dotFlashing 1s infinite alternate;
+            animation-delay: 0s;
+        }
+        .dot-flashing::after {
+            left: 15px;
+            animation: dotFlashing 1s infinite alternate;
+            animation-delay: 1s;
+        }
+        @keyframes dotFlashing {
+            0% {
+                background-color: #4CAF50;
+            }
+            50%, 100% {
+                background-color: rgba(76, 175, 80, 0.2);
+            }
+        }
+        .error-message {
+            color: #f44336;
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chat #{{ chat_id }}</h1>
+    
+    <div class="chat-container" id="messages">
+        {% for msg in history %}
+        <div class="message {{ msg.role }}-message">
+            {{ msg.content }}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="input-area">
+        <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off">
+        <button id="send-button" onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        const chatId = "{{ chat_id }}";
+        const sendButton = document.getElementById('send-button');
+        const messageInput = document.getElementById('message-input');
+
+        // Обработка нажатия Enter
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Блокируем кнопку и поле ввода на время обработки
+            sendButton.disabled = true;
+            messageInput.disabled = true;
+            sendButton.innerHTML = 'Sending <span class="dot-flashing"></span>';
+
+            // Добавляем сообщение пользователя
+            addMessage("user", message);
+            messageInput.value = "";
+
+            try {
+                const response = await fetch(`/api/chats/${chatId}/messages`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        model: "local-model"  // Используем фиксированное имя для LM Studio
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Server returned an error');
+                }
+
+                const data = await response.json();
+                
+                if (!data.response) {
+                    throw new Error('Empty response from server');
+                }
+                
+                addMessage("assistant", data.response);
+            } catch (error) {
+                console.error("Error:", error);
+                showError(error.message);
+            } finally {
+                // Разблокируем кнопку и поле ввода
+                sendButton.disabled = false;
+                messageInput.disabled = false;
+                sendButton.textContent = 'Send';
+                messageInput.focus();
+            }
+        }
+
+        function addMessage(role, content) {
+            const messagesDiv = document.getElementById("messages");
+            const msgElement = document.createElement("div");
+            msgElement.className = `message ${role}-message`;
+            
+            // Сохраняем переносы строк и форматирование
+            msgElement.innerHTML = content.replace(/\n/g, '<br>');
+            
+            messagesDiv.appendChild(msgElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function showError(message) {
+            const messagesDiv = document.getElementById("messages");
+            const errorElement = document.createElement("div");
+            errorElement.className = "error-message";
+            errorElement.textContent = `Error: ${message}`;
+            messagesDiv.appendChild(errorElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>

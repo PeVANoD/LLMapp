@@ -74,6 +74,27 @@ class SQLiteChatStorage(IChatStorage):
     def load_from_disk(self):
         pass  # SQLite loads automatically
 
+    def get_all_chats(self) -> List[Dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+            SELECT 
+                chats.chat_id, 
+                chats.created_at,
+                COUNT(messages.id) as message_count
+                FROM chats
+                LEFT JOIN messages ON chats.chat_id = messages.chat_id
+                GROUP BY chats.chat_id
+                ORDER BY chats.created_at DESC
+            """)
+            return [
+                {
+                    "chat_id": row[0],
+                    "created_at": row[1],
+                    "message_count": row[2]
+                }
+                for row in cursor.fetchall()
+            ]
+
 class FileStorage(IFileStorage):
     def __init__(self, storage_dir: str = "file_storage"):
         self.storage_dir = storage_dir

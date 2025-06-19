@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local LLM Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #444;
+        }
+        .links {
+            margin-top: 30px;
+        }
+        .link-button {
+            display: inline-block;
+            margin: 10px;
+            padding: 12px 24px;
+            background: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        .link-button:hover {
+            background: #45a049;
+        }
+        .api-link {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Local LLM Chat API</h1>
+        <p>Welcome to your local AI assistant powered by Ollama/LM Studio!</p>
+        
+        <div class="links">
+            <a href="/docs" class="link-button">📄 API Docs (Swagger)</a>
+            <a href="/redoc" class="link-button">📖 API Docs (ReDoc)</a>
+            <a href="/chats" class="link-button">💬 Start New Chat</a>
+        </div>
+
+        <div class="api-link">
+            <p>API is running at <code>http://127.0.0.1:8000</code></p>
+        </div>
+    </div>
+</body>
+</html>
