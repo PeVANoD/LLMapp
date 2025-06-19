@@ -31,7 +31,6 @@
             display: inline-block;
             margin: 10px;
             padding: 12px 24px;
-            background: #4CAF50;
             color: white;
             text-decoration: none;
             border-radius: 4px;
@@ -39,7 +38,19 @@
             transition: background 0.3s;
         }
         .link-button:hover {
+            opacity: 0.9;
+        }
+        .docs-button {
+            background: #4CAF50;
+        }
+        .docs-button:hover {
             background: #45a049;
+        }
+        .chats-button {
+            background: linear-gradient(135deg, #6e48aa 0%, #4776E6 100%);
+        }
+        .chats-button:hover {
+            background: linear-gradient(135deg, #5d3a92 0%, #3c64c7 100%);
         }
         .api-link {
             margin-top: 20px;
@@ -54,9 +65,9 @@
         <p>Welcome to your local AI assistant powered by Ollama/LM Studio!</p>
         
         <div class="links">
-            <a href="/docs" class="link-button">📄 API Docs (Swagger)</a>
-            <a href="/redoc" class="link-button">📖 API Docs (ReDoc)</a>
-            <a href="/chats" class="link-button">📑 My Chats</a>
+            <a href="/docs" class="link-button docs-button">📄 API Docs (Swagger)</a>
+            <a href="/redoc" class="link-button docs-button">📖 API Docs (ReDoc)</a>
+            <a href="/chats" class="link-button chats-button">📑 My Chats</a>
         </div>
 
         <div class="api-link">

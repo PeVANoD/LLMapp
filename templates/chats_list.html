@@ -35,43 +35,47 @@
             display: flex;
             gap: 10px;
         }
+        /* Унифицированные стили для всех кнопок */
+        .btn {
+            color: white;
+            border: none;
+            padding: 8px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+            text-align: center;
+            display: inline-block;
+            min-width: 80px; /* Минимальная ширина для всех кнопок */
+        }
         .continue-btn {
             background: #4CAF50;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 3px;
-            text-decoration: none;
         }
         .delete-btn {
             background: #f44336;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 3px;
-            cursor: pointer;
         }
         .action-btn {
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
         }
         .new-chat-btn {
             background: #2196F3;
-            margin-top: 20px;
         }
         .back-btn {
             background: #FF9800;
-            margin-top: 20px;
         }
         .buttons-container {
             display: flex;
             gap: 10px;
             margin-top: 20px;
+        }
+        .buttons-container a, 
+        .buttons-container form {
+            flex: 1;
+        }
+        /* Специфичные стили для кнопок в форме */
+        .buttons-container form button {
+            width: 100%;
         }
     </style>
 </head>
@@ -91,9 +95,9 @@
                 </small>
             </div>
             <div class="chat-actions">
-                <a href="/chat/{{ chat.chat_id }}" class="continue-btn">Continue</a>
+                <a href="/chat/{{ chat.chat_id }}" class="btn continue-btn">Continue</a>
                 <form action="/chats/{{ chat.chat_id }}/delete" method="POST">
-                    <button type="submit" class="delete-btn">Delete</button>
+                    <button type="submit" class="btn delete-btn">Delete</button>
                 </form>
             </div>
         </li>
@@ -101,9 +105,9 @@
     </ul>
 
     <div class="buttons-container">
-        <a href="/" class="action-btn back-btn">← Back to Main</a>
+        <a href="/" class="btn action-btn back-btn">← Back to Main</a>
         <form action="/chats/new" method="POST">
-            <button type="submit" class="action-btn new-chat-btn">+ New Chat</button>
+            <button type="submit" class="btn action-btn new-chat-btn">+ New Chat</button>
         </form>
     </div>
 </body>
