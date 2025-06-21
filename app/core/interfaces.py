@@ -5,7 +5,12 @@ import numpy as np
 
 class ILLMClient(ABC):
     @abstractmethod
-    def generate_response(self, messages: List[Dict], model: str) -> str:
+    def generate_response(
+        self,
+        messages: List[Dict],
+        model: str,
+        max_tokens: Optional[int] = None
+    ) -> str:
         pass
 
 

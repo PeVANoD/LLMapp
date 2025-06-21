@@ -1,0 +1,2 @@
+Для работы с LM Studio нужно запустить на нем сервер API.
+Команда для запуска сервера: python -m uvicorn app.main:app --reload

@@ -4,12 +4,15 @@ from fastapi import FastAPI, HTTPException, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import PlainTextResponse 
 from typing import List, Dict
 from app.core.interfaces import ILLMClient, IChatStorage
 from app.infrastructure.storage import SQLiteChatStorage
 from app.adapters.llm_clients import LMStudioClient
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 from app.config import Config
+from typing import Optional
+
 
 # Настройка логгирования
 logging.basicConfig(
@@ -32,11 +35,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Настраиваем Jinja2 для шаблонов
 templates = Jinja2Templates(directory="templates")
 
-# Конфигурация
-class Config:
-    LM_STUDIO_URL = "http://localhost:1234/v1"  # Порт должен совпадать с настройками LM Studio
-    ACTIVE_MODEL = "local-model"  # Фиксированное имя для LM Studio API
-    DEFAULT_MODEL = "google/gemma-3.1b"
+
 
 def get_llm_client() -> ILLMClient:
     try:
@@ -51,7 +50,14 @@ def get_chat_storage() -> IChatStorage:
 # Модели запросов
 class MessageRequest(BaseModel):
     message: str
-    model: str = Config.DEFAULT_MODEL
+    model: str = Field(default=Config.DEFAULT_MODEL, description="Модель для генерации ответа")
+    use_web: bool = Field(default=False, description="Использовать веб-поиск")
+    max_tokens: Optional[int] = Field(
+        default=None,
+        ge=50,
+        le=4000,
+        description="Максимальное количество токенов (50-4000). Если None, используется значение по умолчанию модели"
+    )
 
 # Эндпоинты
 @app.get("/", response_class=HTMLResponse)
@@ -108,44 +114,75 @@ async def get_chat_page(
         }
     )
 
+#----------------------------------------------------#
+#----------------------------------------------------#
+#---------------------ДЛЯ--WEB-----------------------#
+#----------------------------------------------------#
+#----------------------------------------------------#
+
+from app.core.interfaces import IWebSearch
+from app.adapters.web_search import DuckDuckGoSearch
+from app.adapters.web_search import GoogleSearch 
+from datetime import datetime
+
+def get_web_search() -> Optional[IWebSearch]:
+    # Можно переключаться между Google и DuckDuckGo
+    if Config.USE_DUCKDUCKGO:
+        return DuckDuckGoSearch()
+    elif Config.GOOGLE_API_KEY and Config.GOOGLE_ENGINE_ID:
+        return GoogleSearch(Config.GOOGLE_API_KEY, Config.GOOGLE_ENGINE_ID)
+    return None
+
 @app.post("/api/chats/{chat_id}/messages")
 async def post_message_to_chat(
     chat_id: str,
     request_data: MessageRequest,
     llm: ILLMClient = Depends(get_llm_client),
-    storage: IChatStorage = Depends(get_chat_storage)
+    storage: IChatStorage = Depends(get_chat_storage),
+    web_search: Optional[IWebSearch] = Depends(get_web_search)
 ):
     try:
-        # Добавляем сообщение пользователя
-        storage.add_message(chat_id, {
-            "role": "user",
-            "content": request_data.message
-        })
+        # Сохраняем сообщение пользователя
+        storage.add_message(chat_id, {"role": "user", "content": request_data.message})
+        
+        # Получаем веб-результаты (если включено)
+        web_context = ""
+        if request_data.use_web and web_search:
+            search_results = web_search.search(request_data.message)
+            web_context = (
+                f"🔍 Результаты поиска ({datetime.now().strftime('%d.%m.%Y %H:%M')}):\n"
+                f"{search_results}\n\n"
+            )
+            storage.add_message(chat_id, {"role": "system", "content": web_context})
+
+        # Формируем промт для LLM
+        messages = [
+            {"role": "system", "content": "Ты - полезный AI ассистент. " + 
+             ("Используй следующие данные при ответе:\n" + web_context if web_context else "")},
+            {"role": "user", "content": request_data.message}
+        ]
         
         # Генерируем ответ
-        response_text = llm.generate_response(
-            messages=storage.get_history(chat_id),
-            model=request_data.model
+        response = llm.generate_response(
+            messages=messages,
+            model=request_data.model,
+            max_tokens=request_data.max_tokens
         )
         
-        # Проверяем, что ответ не пустой
-        if not response_text:
-            raise ValueError("Empty response from LLM")
-            
-        # Добавляем ответ ассистента
-        storage.add_message(chat_id, {
-            "role": "assistant",
-            "content": response_text
-        })
+        storage.add_message(chat_id, {"role": "assistant", "content": response})
+        return {"response": response}
         
-        return {"response": response_text}
-    
-    except ValueError as e:
-        logger.error(f"Validation error: {str(e)}")
-        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
-        logger.error(f"LLM processing error: {str(e)}")
+        logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+#----------------------------------------------------#
+#----------------------------------------------------#
+#----------------------------------------------------#
+#----------------------------------------------------#
+#----------------------------------------------------#
+
 
 if __name__ == "__main__":
     import uvicorn
@@ -181,3 +218,14 @@ async def get_chat_name(
     storage: IChatStorage = Depends(get_chat_storage)
 ):
     return {"name": storage.get_chat_name(chat_id)}
+
+
+@app.get("/debug-web-search")
+async def debug_web_search(query: str, web_search: IWebSearch = Depends(get_web_search)):
+    content = web_search.search(query)
+    return {"query": query, "results": content}  
+
+@app.get("/test-ddg")
+async def test_ddg(query: str):
+    searcher = DuckDuckGoSearch()
+    return PlainTextResponse(searcher.search(query))

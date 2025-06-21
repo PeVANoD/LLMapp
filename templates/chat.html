@@ -215,6 +215,26 @@
             margin: 10px 0;
             border-radius: 4px;
         }
+        .web-search-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 10px;
+        }
+        .web-search-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+        .system-message {
+            background-color: #fff8e1;
+            margin: 10px auto;
+            text-align: center;
+            font-size: 0.9em;
+            color: #666;
+            border-radius: 8px;
+            padding: 8px 12px;
+            max-width: 90%;
+        }
     </style>
 </head>
 <body>
@@ -239,6 +259,10 @@
 
     <div class="input-area">
         <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off">
+        <div class="web-search-toggle">
+            <input type="checkbox" id="web-search-checkbox">
+            <label for="web-search-checkbox">Web Search</label>
+        </div>
         <button id="send-button" onclick="sendMessage()">Send</button>
     </div>
 
@@ -270,16 +294,21 @@
             async function sendMessage() {
                 const message = messageInput.value.trim();
                 if (!message) return;
-    
-                // Блокируем кнопку и поле ввода на время обработки
+
+                const useWebSearch = document.getElementById('web-search-checkbox').checked;
+                
+                // Блокируем кнопку и поле ввода
                 sendButton.disabled = true;
                 messageInput.disabled = true;
                 sendButton.innerHTML = 'Sending <span class="dot-flashing"></span>';
-    
+
                 // Добавляем сообщение пользователя
                 addMessage("user", message);
+                if (useWebSearch) {
+                    addMessage("system", "🔍 Web search enabled for this request");
+                }
                 messageInput.value = "";
-    
+
                 try {
                     const response = await fetch(`/api/chats/${chatId}/messages`, {
                         method: "POST",
@@ -288,15 +317,16 @@
                         },
                         body: JSON.stringify({
                             message: message,
-                            model: "local-model"
+                            model: "local-model",
+                            use_web: useWebSearch  // Добавляем флаг веб-поиска
                         })
                     });
-    
+
                     if (!response.ok) {
                         const errorData = await response.json();
                         throw new Error(errorData.detail || 'Server returned an error');
                     }
-    
+
                     const data = await response.json();
                     
                     if (!data.response) {
@@ -308,7 +338,6 @@
                     console.error("Error:", error);
                     showError(error.message);
                 } finally {
-                    // Разблокируем кнопку и поле ввода
                     sendButton.disabled = false;
                     messageInput.disabled = false;
                     sendButton.textContent = 'Send';
@@ -342,6 +371,7 @@
             chatNameElement.addEventListener('click', function() {
                 chatTitle.classList.add('editing');
                 chatNameInput.focus();
+                chatNameInput.select(); // Выделяем весь текст
             });
             
             // Сохранение названия по кнопке
