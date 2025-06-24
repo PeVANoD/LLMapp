@@ -1,47 +1,113 @@
+# app/adapters/llm_clients.py
+import json
+from typing import List, Dict, Optional
 import requests
 import logging
-from typing import List, Dict
-from PIL import Image
-import io
-import base64
-from app.config import Config  # Импортируем конфиг
-from typing import Optional
+from app.adapters.web_search import WebSearchService
+from app.config import Config
 
 logger = logging.getLogger(__name__)
 
-class LMStudioClient:
-    def __init__(self, base_url: str = None, model: str = None):
-        self.base_url = base_url or Config.LM_STUDIO_URL
-        self.model = model or Config.LM_STUDIO_MODEL
+class OllamaClient:
+    def __init__(self):
+        self.base_url = Config.OLLAMA_URL
 
-    def generate_response(self, messages: str | List[Dict], model: str, **kwargs) -> str:
-        """Генерация ответа через LM Studio API"""
+    def list_models(self) -> List[str]:
+        """List all available Ollama models"""
         try:
-            # Форматируем сообщения в правильный формат
-            if isinstance(messages, str):
-                messages = [{"role": "user", "content": messages}]
-            
-            payload = {
+            response = requests.get(
+                f"{self.base_url}/api/tags",
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
+            return [model["name"] for model in data.get("models", [])]
+        except Exception as e:
+            logger.error(f"Error listing Ollama models: {str(e)}")
+            return []
+
+    def generate_response(self, messages: List[Dict], model: str, **kwargs) -> str:
+        try:
+            request_data = {
                 "model": model,
                 "messages": messages,
-                "temperature": 0.7,
-                "max_tokens": kwargs.get("max_tokens", 2000)
+                "stream": False,
+                "options": {
+                    "temperature": kwargs.get("temperature", 0.7),
+                    "top_p": kwargs.get("top_p", 0.9),
+                }
             }
             
+            logger.debug(f"Sending to Ollama: {request_data}")
+            
             response = requests.post(
-                f"{self.base_url}/chat/completions",
-                json=payload,
-                headers={"Content-Type": "application/json"},
+                f"{self.base_url}/api/chat",
+                json=request_data,
                 timeout=60
             )
             
-            # Добавляем логирование для отладки
-            logger.debug(f"LM Studio request: {payload}")
-            logger.debug(f"LM Studio response: {response.text}")
+            logger.debug(f"Ollama raw response: {response.text}")
             
             response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"]
+            response_data = response.json()
+            return response_data.get("message", {}).get("content", "No response generated")
             
         except Exception as e:
+            logger.error(f"Ollama error: {str(e)}")
+            raise
+        
+class LMStudioClient:
+    def __init__(self):
+        self.base_url = Config.LM_STUDIO_URL
+
+    def generate_response(self, messages: List[Dict], model: str, **kwargs) -> str:
+        try:
+            response = requests.post(
+                f"{self.base_url}/v1/chat/completions",
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": kwargs.get("temperature", 0.7),
+                    "max_tokens": kwargs.get("max_tokens", Config.DEFAULT_MAX_TOKENS),
+                    "stream": False
+                },
+                timeout=60
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+        except Exception as e:
             logger.error(f"LM Studio error: {str(e)}")
-            return f"Ошибка генерации ответа: {str(e)}"
+            raise
+
+    def list_models(self) -> List[str]:
+        try:
+            response = requests.get(f"{self.base_url}/v1/models", timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict) and 'data' in data:
+                return [model["id"] for model in data["data"]]
+            return []
+        except Exception as e:
+            logger.error(f"Error listing LM Studio models: {str(e)}")
+            return []
+
+class MultiLLMClient:
+    def __init__(self):
+        self.clients = {
+            'ollama': OllamaClient(),
+            'lm_studio': LMStudioClient()
+        }
+        self.web_search_service = WebSearchService()  # Renamed from web_search to web_search_service
+    def generate_response(self, messages: List[Dict], model: str) -> str:
+        """Generate response with proper context handling"""
+        client = self._get_client_for_model(model)
+        if not client:
+            raise ValueError("No suitable client found for model")
+        
+        return client.generate_response(messages, model)
+    def get_client(self, provider: str):
+        return self.clients.get(provider)
+    
+    def perform_web_search(self, query: str) -> List[Dict]:  # Renamed method
+        return self.web_search_service.search(query)

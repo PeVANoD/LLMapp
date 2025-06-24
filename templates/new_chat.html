@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New {{ provider_display }} Chat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --primary-light: #e0e7ff;
+            --dark-color: #1e293b;
+            --light-color: #f8fafc;
+            --gray-color: #94a3b8;
+            --gray-light: #e2e8f0;
+            --border-radius: 12px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.05);
+            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: var(--dark-color);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--gray-color);
+            text-decoration: none;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+            transition: var(--transition);
+            padding: 0.5rem 0;
+        }
+
+        .back-btn:hover {
+            color: var(--primary-color);
+            transform: translateX(-3px);
+        }
+
+        .page-header {
+            margin-bottom: 2rem;
+        }
+
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--dark-color);
+            margin-bottom: 0.5rem;
+            position: relative;
+            display: inline-block;
+        }
+
+        .page-title::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 0;
+            width: 60px;
+            height: 4px;
+            background-color: var(--primary-color);
+            border-radius: 2px;
+        }
+
+        .page-subtitle {
+            color: var(--gray-color);
+            font-size: 1rem;
+        }
+
+        .chat-name-container {
+            margin-bottom: 2rem;
+        }
+
+        .chat-name-label {
+            display: block;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+
+        .chat-name-input {
+            width: 100%;
+            padding: 1rem 1.25rem;
+            border: 2px solid var(--gray-light);
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: var(--transition);
+            background-color: white;
+        }
+
+        .chat-name-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .chat-name-input::placeholder {
+            color: var(--gray-color);
+            opacity: 0.6;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-icon {
+            color: var(--primary-color);
+            font-size: 1.25rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+
+        .model-list {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .model-item {
+            background-color: white;
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-left: 4px solid transparent;
+        }
+
+        .model-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            border-left-color: var(--primary-color);
+        }
+
+        .model-info {
+            flex: 1;
+        }
+
+        .model-name {
+            font-weight: 600;
+            color: var(--dark-color);
+            margin-bottom: 0.25rem;
+        }
+
+        .model-meta {
+            font-size: 0.875rem;
+            color: var(--gray-color);
+        }
+
+        .model-select-icon {
+            color: var(--primary-color);
+            opacity: 0;
+            transition: var(--transition);
+            margin-left: 1rem;
+        }
+
+        .model-item:hover .model-select-icon {
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1.5rem;
+            }
+
+            .page-title {
+                font-size: 1.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/chats/{{ provider }}" class="back-btn">
+            <i class="fas fa-arrow-left"></i>
+            Back to chats
+        </a>
+
+        <div class="page-header">
+            <h1 class="page-title">Create New Chat</h1>
+            <p class="page-subtitle">with {{ provider_display }} provider</p>
+        </div>
+
+        <div class="chat-name-container">
+            <label for="chat-name" class="chat-name-label">Chat Name (optional)</label>
+            <input type="text" id="chat-name" class="chat-name-input" placeholder="e.g. 'Project Discussion', 'Personal Assistant'">
+        </div>
+
+        <div class="section-header">
+            <i class="fas fa-robot section-icon"></i>
+            <h2 class="section-title">Select AI Model</h2>
+        </div>
+
+        <ul class="model-list">
+            {% for model in models %}
+            <li class="model-item" onclick="createChat('{{ model }}')">
+                <div class="model-info">
+                    <div class="model-name">{{ model }}</div>
+                    <div class="model-meta">Advanced language model</div>
+                </div>
+                <i class="fas fa-chevron-right model-select-icon"></i>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <script>
+        async function createChat(model) {
+            const chatName = document.getElementById('chat-name').value;
+            const item = event.currentTarget;
+            
+            // Save original content
+            const originalContent = item.innerHTML;
+            
+            // Show loading state
+            item.innerHTML = `
+                <div style="width: 100%; display: flex; justify-content: center;">
+                    <i class="fas fa-spinner fa-spin" style="color: var(--primary-color); font-size: 1.25rem;"></i>
+                </div>
+            `;
+            item.style.cursor = 'wait';
+            item.style.pointerEvents = 'none';
+            
+            try {
+                const response = await fetch('/api/chats', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        provider: "{{ provider }}",
+                        model: model,
+                        name: chatName
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to create chat');
+
+                const data = await response.json();
+                window.location.href = `/chat/${data.chat_id}`;
+            } catch (error) {
+                console.error('Error:', error);
+                // Restore original content
+                item.innerHTML = originalContent;
+                item.style.cursor = 'pointer';
+                item.style.pointerEvents = 'auto';
+                
+                // Show error message
+                const errorMsg = document.createElement('div');
+                errorMsg.style.color = '#ef4444';
+                errorMsg.style.marginTop = '0.5rem';
+                errorMsg.style.fontSize = '0.875rem';
+                errorMsg.textContent = 'Failed to create chat. Please try again.';
+                item.appendChild(errorMsg);
+            }
+        }
+
+        // Add Enter key functionality
+        document.getElementById('chat-name').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && this.value.trim()) {
+                const firstModel = document.querySelector('.model-item');
+                if (firstModel) firstModel.click();
+            }
+        });
+    </script>
+</body>
+</html>

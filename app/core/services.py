@@ -32,6 +32,16 @@ class SQLiteChatStorage(IChatStorage):
                     FOREIGN KEY(chat_id) REFERENCES chats(chat_id)
                 )
             """)
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS message_files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id INTEGER,
+                file_name TEXT,
+                file_type TEXT,
+                file_content TEXT,
+                FOREIGN KEY(message_id) REFERENCES messages(id)
+            )
+        """)
             conn.commit()
 
     def create_chat(self) -> str:
@@ -43,15 +53,22 @@ class SQLiteChatStorage(IChatStorage):
 
     def add_message(self, chat_id: str, message: Dict):
         with sqlite3.connect(self.db_path) as conn:
-            # Check if chat exists
-            cursor = conn.execute("SELECT 1 FROM chats WHERE chat_id = ?", (chat_id,))
-            if not cursor.fetchone():
-                raise ValueError(f"Chat {chat_id} not found")
-            
+            # Store message text
             conn.execute(
                 "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
-                (chat_id, message['role'], message['content'])
+                (chat_id, message["role"], message["content"])
             )
+            
+            # If message has files, store them in a separate table
+            if "files" in message:
+                for file_info in message["files"]:
+                    conn.execute(
+                        "INSERT INTO message_files (message_id, file_name, file_type, file_content) VALUES (?, ?, ?, ?)",
+                        (conn.execute("SELECT last_insert_rowid()").fetchone()[0],
+                        file_info["name"],
+                        file_info["type"],
+                        file_info["content"])
+                    )
             conn.commit()
 
     def get_history(self, chat_id: str) -> List[Dict]:

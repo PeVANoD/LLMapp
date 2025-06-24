@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ provider_display }} Models</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .back-btn {
+            display: inline-block;
+            margin-bottom: 20px;
+            text-decoration: none;
+            color: #333;
+        }
+        .model-list {
+            list-style: none;
+            padding: 0;
+        }
+        .model-item {
+            padding: 15px;
+            border: 1px solid #ddd;
+            margin: 10px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .model-item:hover {
+            background-color: #f5f5f5;
+            transform: translateX(5px);
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+        }
+        .error {
+            color: #c62828;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-btn">← Back to providers</a>
+    <h1>Select {{ provider_display }} Model</h1>
+    
+    <div id="loading">Loading available models...</div>
+    
+    <ul class="model-list" id="model-list" style="display: none;">
+        <!-- Models will be loaded here -->
+    </ul>
+    
+    <div id="error" class="error"></div>
+
+    <script>
+        async function loadModels() {
+            const loadingElement = document.getElementById('loading');
+            const modelList = document.getElementById('model-list');
+            const errorElement = document.getElementById('error');
+            
+            try {
+                const response = await fetch(`/api/providers/{{ provider }}/models`);
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+                
+                const data = await response.json();
+                
+                if (data.models.length === 0) {
+                    throw new Error("No models available for this provider");
+                }
+                
+                // Populate model list
+                modelList.innerHTML = '';
+                data.models.forEach(model => {
+                    const item = document.createElement('li');
+                    item.className = 'model-item';
+                    item.textContent = model;
+                    item.onclick = () => createChat(model);
+                    modelList.appendChild(item);
+                });
+                
+                // Show the list
+                loadingElement.style.display = 'none';
+                modelList.style.display = 'block';
+                
+            } catch (error) {
+                loadingElement.textContent = 'Error loading models';
+                errorElement.textContent = error.message;
+                console.error('Error:', error);
+                
+                // Retry after 3 seconds
+                setTimeout(loadModels, 3000);
+            }
+        }
+        
+        async function createChat(model) {
+            try {
+                const response = await fetch('/api/chats', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        provider: "{{ provider }}",
+                        model: model
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+                
+                const chat = await response.json();
+                window.location.href = `/chats/${chat.chat_id}`;
+            } catch (error) {
+                document.getElementById('error').textContent = 'Error: ' + error.message;
+                console.error('Error:', error);
+            }
+        }
+
+        // Load models when page loads
+        document.addEventListener('DOMContentLoaded', loadModels);
+    </script>
+</body>
+</html>

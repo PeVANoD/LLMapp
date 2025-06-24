@@ -12,7 +12,9 @@ class ILLMClient(ABC):
         max_tokens: Optional[int] = None
     ) -> str:
         pass
-
+    @abstractmethod
+    def list_models(self) -> List[str]:
+        pass
 
 class IEmbeddingService(ABC):
     @abstractmethod

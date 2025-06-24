@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ошибка</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .error-box {
+            padding: 20px;
+            background-color: #ffebee;
+            border: 1px solid #ef9a9a;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 15px;
+            background: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Произошла ошибка</h1>
+    <div class="error-box">
+        {{ error }}
+    </div>
+    <a href="/chats/{{ provider }}" class="back-link">Вернуться к чатам</a>
+</body>
+</html>
