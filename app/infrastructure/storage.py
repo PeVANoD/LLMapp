@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 import logging
 import sqlite3
 from datetime import datetime
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +18,6 @@ class SQLiteChatStorage(IChatStorage):
 
     def _init_db(self):
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("DROP TABLE IF EXISTS messages")
-            conn.execute("DROP TABLE IF EXISTS chat_names")
-            conn.execute("DROP TABLE IF EXISTS chats")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS chats (
                     chat_id TEXT PRIMARY KEY,
@@ -45,6 +43,18 @@ class SQLiteChatStorage(IChatStorage):
                     FOREIGN KEY(chat_id) REFERENCES chats(chat_id)
                 )
             """)
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id TEXT,
+                text TEXT NOT NULL,
+                embedding BLOB NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(chat_id) REFERENCES chats(chat_id)
+            )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_chat ON embeddings(chat_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_text ON embeddings(text)")
             conn.commit()
 
     def create_chat(self, provider: str, model: str) -> str:
@@ -89,9 +99,12 @@ class SQLiteChatStorage(IChatStorage):
             return [{"role": row[0], "content": row[1]} for row in cursor.fetchall()]
 
     def delete_chat(self, chat_id: str):
+        """Удаляет чат и все связанные с ним данные (сообщения, имена, эмбеддинги)"""
         with sqlite3.connect(self.db_path) as conn:
+            # Удаляем в правильном порядке из-за foreign key constraints
             conn.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
             conn.execute("DELETE FROM chat_names WHERE chat_id = ?", (chat_id,))
+            conn.execute("DELETE FROM embeddings WHERE chat_id = ?", (chat_id,))  # Новая строка
             conn.execute("DELETE FROM chats WHERE chat_id = ?", (chat_id,))
             conn.commit()
 
@@ -199,4 +212,92 @@ class SQLiteChatStorage(IChatStorage):
                 ]
         except sqlite3.Error as e:
             logger.error(f"Database error in get_all_chats: {str(e)}")
+            return []
+        
+    def save_embedding(self, chat_id: str, text: str, embedding: List[float]) -> bool:
+        try:
+            embedding_bytes = np.array(embedding, dtype=np.float32).tobytes()
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    "INSERT INTO embeddings (chat_id, text, embedding) VALUES (?, ?, ?)",
+                    (chat_id, text, embedding_bytes)
+                )
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error saving embedding: {str(e)}")
+            return False
+
+    def find_similar_texts(self, embedding: List[float], top_k: int = 3) -> List[Dict]:
+        """Находит наиболее похожие тексты по вектору"""
+        try:
+            query_embed = np.array(embedding, dtype=np.float32)
+            results = []
+            
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("SELECT id, text, embedding FROM embeddings")
+                
+                for row_id, text, embedding_bytes in cursor.fetchall():
+                    try:
+                        embed = np.frombuffer(embedding_bytes, dtype=np.float32)
+                        similarity = float(np.dot(query_embed, embed))
+                        results.append({"id": row_id, "text": text, "score": similarity})
+                    except Exception as e:
+                        logger.error(f"Error processing embedding: {str(e)}")
+                        continue
+                    
+                # Сортируем по убыванию схожести
+                results.sort(key=lambda x: x['score'], reverse=True)
+                return results[:top_k]
+                    
+        except Exception as e:
+            logger.error(f"Error finding similar texts: {str(e)}")
+            return []
+        
+    def search_across_chats(self, query_embedding: List[float], top_k: int = 5) -> List[Dict]:
+        try:
+            query_embed = np.array(query_embedding, dtype=np.float32)
+            results = []
+            
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("""
+                    SELECT 
+                        e.id,
+                        e.text,
+                        e.embedding,
+                        e.chat_id,
+                        COALESCE(cn.name, 'Chat ' || substr(e.chat_id, 1, 8)) as chat_name,
+                        datetime(e.timestamp) as message_time
+                    FROM embeddings e
+                    LEFT JOIN chat_names cn ON e.chat_id = cn.chat_id
+                    ORDER BY e.timestamp DESC
+                    LIMIT 1000  -- Ограничиваем для производительности
+                """)
+                
+                # Получаем все записи и вычисляем схожесть в Python
+                rows = cursor.fetchall()
+                for row in rows:
+                    try:
+                        embed = np.frombuffer(row['embedding'], dtype=np.float32)
+                        similarity = float(np.dot(query_embed, embed))
+                        
+                        results.append({
+                            'id': row['id'],
+                            'text': row['text'],
+                            'chat_id': row['chat_id'],
+                            'chat_name': row['chat_name'],
+                            'message_time': row['message_time'],
+                            'score': similarity
+                        })
+                    except Exception as e:
+                        logger.error(f"Error processing embedding row: {str(e)}")
+                        continue
+            
+            # Сортируем по схожести и берем топ-N
+            results.sort(key=lambda x: x['score'], reverse=True)
+            return results[:top_k]
+            
+        except Exception as e:
+            logger.error(f"Error in search_across_chats: {str(e)}", exc_info=True)
             return []

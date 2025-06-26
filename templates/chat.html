@@ -1,5 +1,10 @@
 <!-- templates/chat.html -->
 <div class="chat-container">
+    <div class="search-container">
+        <input type="text" id="global-search" placeholder="Search across all chats...">
+        <button id="search-button"><i class="fas fa-search"></i></button>
+        <div id="search-results" class="search-results"></div>
+    </div>
     <div class="chat-header">
         <a href="/chats/{{ provider }}" class="back-button">
             <i class="fas fa-arrow-left"></i> Back to chats
@@ -66,6 +71,9 @@
             </button>
         </div>
     </div>
+<!-- Вот сюда вставляем overlay -->
+    <div class="search-overlay" id="search-overlay"></div>
+</div> <!-- закрывающий тег для chat-container -->
 
 <style>
     :root {
@@ -401,6 +409,67 @@
         border-radius: 4px;
         border: 1px solid var(--border);
     }
+    .search-container {
+        position: relative;
+        margin-bottom: 1rem;
+        display: flex;
+    }
+
+    #global-search {
+        flex: 1;
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+    }
+
+    #search-button {
+        padding: 0 1rem;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 0 var(--radius) var(--radius) 0;
+        cursor: pointer;
+    }
+
+    .search-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        z-index: 100;
+        display: none;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .search-result-item {
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+    }
+
+    .search-result-item:hover {
+        background: var(--primary-light);
+    }
+
+    .search-result-meta {
+        font-size: 0.8rem;
+        color: var(--text-light);
+    }
+    .search-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: transparent;
+        z-index: 99;
+        display: none;
+    }
 </style>
 
 <script>
@@ -412,18 +481,92 @@ document.addEventListener('DOMContentLoaded', function() {
     const webSearchToggle = document.getElementById('web-search-toggle');
     const renameBtn = document.getElementById('rename-chat-btn');
     const deleteBtn = document.getElementById('delete-chat-btn');
-const fileUpload = document.getElementById('file-upload');
-const imageUpload = document.getElementById('image-upload');
-let uploadedFiles = [];
+    const fileUpload = document.getElementById('file-upload');
+    const imageUpload = document.getElementById('image-upload');
+    const searchOverlay = document.getElementById('search-overlay');
+    let uploadedFiles = [];
 
-    // Добавьте обработчики событий для загрузки файлов
+    // Инициализация поиска
+    document.getElementById('search-button').addEventListener('click', function() {
+        const query = document.getElementById('global-search').value.trim();
+        if (query) {
+            searchMessages(query);
+            showSearchResults();
+        }
+    });
+
+    document.getElementById('global-search').addEventListener('keyup', function(e) {
+        if (e.key === 'Enter') {
+            const query = document.getElementById('global-search').value.trim();
+            if (query) {
+                searchMessages(query);
+                showSearchResults();
+            }
+        }
+    });
+
+    // Функции для управления отображением результатов поиска
+    function showSearchResults() {
+        document.getElementById('search-results').style.display = 'block';
+        searchOverlay.style.display = 'block';
+    }
+
+    function hideSearchResults() {
+        document.getElementById('search-results').style.display = 'none';
+        searchOverlay.style.display = 'none';
+    }
+
+    // Обработчик клика по оверлею
+    searchOverlay.addEventListener('click', hideSearchResults);
+
+    async function searchMessages(query) {
+        if (!query) {
+            hideSearchResults();
+            return;
+        }
+        
+        const resultsContainer = document.getElementById('search-results');
+        resultsContainer.innerHTML = '<div class="loading">Searching...</div>';
+        
+        try {
+            const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
+            const results = await response.json();
+            
+            if (results.length === 0) {
+                resultsContainer.innerHTML = '<div class="no-results">No matches found</div>';
+                return;
+            }
+            
+            resultsContainer.innerHTML = '';
+            results.forEach(result => {
+                const item = document.createElement('div');
+                item.className = 'search-result-item';
+                item.innerHTML = `
+                    <div class="search-result-text">${result.text}</div>
+                    <div class="search-result-meta">
+                        From chat: ${result.chat_name} (${new Date(result.message_time).toLocaleString()})
+                    </div>
+                `;
+                item.addEventListener('click', () => {
+                    hideSearchResults();
+                    window.location.href = `/chat/${result.chat_id}`;
+                });
+                resultsContainer.appendChild(item);
+            });
+        } catch (error) {
+            resultsContainer.innerHTML = '<div class="error">Search failed</div>';
+            console.error('Search error:', error);
+        }
+    }
+
+    // Остальной код (обработчики файлов, сообщений и т.д.) остается без изменений
     fileUpload.addEventListener('change', handleFileUpload);
     imageUpload.addEventListener('change', handleImageUpload);
 
     function handleFileUpload(e) {
         const files = Array.from(e.target.files);
         files.forEach(file => {
-            if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            if (file.size > 5 * 1024 * 1024) {
                 alert('File size too large (max 5MB)');
                 return;
             }
@@ -432,19 +575,19 @@ let uploadedFiles = [];
                 type: 'file',
                 file: file,
                 name: file.name,
-                content: null // Will be filled after reading
+                content: null
             });
             
             displayUploadedFile(file.name, 'file');
         });
         
-        e.target.value = ''; // Reset input
+        e.target.value = '';
     }
 
     function handleImageUpload(e) {
         const files = Array.from(e.target.files);
         files.forEach(file => {
-            if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            if (file.size > 5 * 1024 * 1024) {
                 alert('Image size too large (max 5MB)');
                 return;
             }
@@ -453,13 +596,13 @@ let uploadedFiles = [];
                 type: 'image',
                 file: file,
                 name: file.name,
-                content: null // Will be filled after reading
+                content: null
             });
             
             displayUploadedFile(file.name, 'image');
         });
         
-        e.target.value = ''; // Reset input
+        e.target.value = '';
     }
 
     function displayUploadedFile(name, type) {

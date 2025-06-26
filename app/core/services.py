@@ -113,51 +113,23 @@ class FileStorage(IFileStorage):
         filepath = os.path.join(self.storage_dir, filename)
         if os.path.exists(filepath):
             os.remove(filepath)
-class EmbeddingService(IEmbeddingService):
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+
+class EmbeddingService:
+    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
         self.model = SentenceTransformer(model_name)
-        self._init_db()
-
-    def _init_db(self):
-        with sqlite3.connect("embeddings.db") as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS embeddings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    text TEXT UNIQUE,
-                    embedding BLOB,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            conn.commit()
-
+        self.cache = {}  # Простое кэширование в памяти
+        
     def create_embedding(self, text: str) -> List[float]:
-        embedding = self.model.encode(text)
-        embedding_bytes = embedding.tobytes()
-        
-        with sqlite3.connect("embeddings.db") as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO embeddings (text, embedding) VALUES (?, ?)",
-                (text, embedding_bytes)
-            )
-            conn.commit()
-        
-        return embedding.tolist()
-
-    def search_similar(self, query: str, top_k: int = 3) -> List[Dict]:
-        query_embed = self.model.encode(query)
-        
-        with sqlite3.connect("embeddings.db") as conn:
-            cursor = conn.execute("SELECT text, embedding FROM embeddings")
-            results = []
+        if text in self.cache:
+            return self.cache[text]
             
-            for text, embedding_bytes in cursor.fetchall():
-                try:
-                    embed = np.frombuffer(embedding_bytes, dtype=np.float32)
-                    similarity = float(np.dot(query_embed, embed))
-                    results.append({"text": text, "score": similarity})
-                except Exception as e:
-                    logger.error(f"Error processing embedding: {str(e)}")
-                    continue
-            
-            results.sort(key=lambda x: x['score'], reverse=True)
-            return results[:top_k]
+        embedding = self.model.encode(text).tolist()
+        self.cache[text] = embedding
+        return embedding
+    
+    def calculate_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        try:
+            return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
+        except Exception as e:
+            logger.error(f"Error calculating similarity: {str(e)}")
+            return 0.0

@@ -15,6 +15,10 @@ class Config:
     MAX_SEARCH_RESULTS = 3
     USE_DUCKDUCKGO = True
     
+    EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # Модель для эмбеддингов по умолчанию
+    SIMILARITY_THRESHOLD = 0.7  # Порог схожести для использования контекста
+    MAX_CONTEXT_LENGTH = 1000  # Максимальная длина контекста в токенах
+
     # Параметры генерации
     DEFAULT_MAX_TOKENS = 2048
     DEFAULT_MODEL = "mistral"  # Теперь используем mistral по умолчанию

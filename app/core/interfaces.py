@@ -19,11 +19,14 @@ class ILLMClient(ABC):
 class IEmbeddingService(ABC):
     @abstractmethod
     def create_embedding(self, text: str) -> List[float]:
+        """Создает векторное представление текста"""
         pass
     
     @abstractmethod
-    def search_similar(self, query: str, top_k: int) -> List[Dict]:
+    def calculate_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Вычисляет косинусную схожесть между векторами"""
         pass
+
 
 class IFileProcessor(ABC):
     @abstractmethod
@@ -62,6 +65,14 @@ class IChatStorage(ABC):
     
     @abstractmethod
     def load_from_disk(self):
+        pass
+    
+    @abstractmethod
+    def save_embedding(self, chat_id: str, text: str, embedding: List[float]) -> bool:
+        pass
+    
+    @abstractmethod
+    def find_similar_texts(self, embedding: List[float], top_k: int = 3) -> List[Dict]:
         pass
 
 class IFileStorage(ABC):

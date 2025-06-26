@@ -159,6 +159,14 @@ async def process_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     
+@app.get("/api/search", response_model=List[dict])
+async def search_messages(query: str):
+    try:
+        embedding = llm_client.embedding_service.create_embedding(query)
+        results = chat_storage.search_across_chats(embedding)
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat/{chat_id}/message")
 async def add_message(
@@ -170,16 +178,16 @@ async def add_message(
     file_types: List[str] = Form([])
 ):
     try:
-        # Get chat info
+        # 1. Получаем информацию о чате
         chat = next((c for c in chat_storage.get_all_chats() if c["chat_id"] == chat_id), None)
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
         
-        # Update model if changed
+        # 2. Обновляем модель, если она изменилась
         if model != chat["model"]:
             chat_storage.update_chat_model(chat_id, model)
         
-        # Process files
+        # 3. Обрабатываем файлы (существующая функциональность)
         file_infos = []
         for file, file_type in zip(files, file_types):
             content = await process_uploaded_file(file, file_type)
@@ -189,61 +197,96 @@ async def add_message(
                 "content": content
             })
         
-        # Add user message
+        # 4. Создаем эмбеддинг сообщения
+        embedding = llm_client.embedding_service.create_embedding(message)
+        
+        # 5. Сохраняем сообщение пользователя
         user_message = {"role": "user", "content": message}
         if file_infos:
             user_message["files"] = file_infos
         chat_storage.add_message(chat_id, user_message)
+        chat_storage.save_embedding(chat_id, message, embedding)
         
-        # Get full history
+        # 6. Получаем историю чата
         history = chat_storage.get_history(chat_id)
         
-        # If web search is enabled, perform search
+        # 7. Ищем релевантный контекст из других чатов (новая функциональность)
+        context_messages = []
+        if len(message) > 10:  # Не ищем контекст для очень коротких сообщений
+            similar_messages = chat_storage.search_across_chats(embedding)
+            for msg in similar_messages[:3]:  # Берем топ-3
+                if msg['chat_id'] != chat_id:  # Не включаем сообщения из текущего чата
+                    context_messages.append({
+                        'role': 'context',
+                        'content': f"From chat '{msg['chat_name']}': {msg['text']}"
+                    })
+        
+        # 8. Веб-поиск (существующая функциональность)
         search_context = ""
         if use_web_search:
             try:
                 search_results = llm_client.perform_web_search(message)
                 if search_results:
-                    search_context = "\n\nHere are some recent web search results that might be relevant:\n"
+                    search_context = "\n\nWeb search results:\n"
                     search_context += "\n".join(
                         f"- [{result['title']}]({result['link']}): {result['snippet']}"
                         for result in search_results[:3]
                     )
             except Exception as e:
                 logger.error(f"Web search failed: {str(e)}")
-                search_context = "\n\n[Web search unavailable at this time]"
+                search_context = "\n\n[Web search unavailable]"
         
-        # Generate response - include file content in context
+        # 9. Подготавливаем сообщения для LLM
+        messages_for_llm = []
+        
+        # 9.1. Добавляем системное сообщение с инструкциями
+        system_message = {
+            "role": "system",
+            "content": "Ты помощник-ассистент. Испротзуй контекстную информацию, если она будет полезна при ответе."
+        }
+        
+        # 9.2. Добавляем контекст из других чатов
+        if context_messages:
+            context_text = "\n".join([msg['content'] for msg in context_messages])
+            system_message['content'] += f"\n\nДополнительный контекст:\n{context_text}"
+        
+        messages_for_llm.append(system_message)
+        
+        # 9.3. Добавляем историю текущего чата с обработкой файлов
+        for msg in history:
+            if msg.get("files"):
+                file_content = "\n".join(
+                    f"File {f['name']} ({f['type']}): {f['content'][:1000]}..."
+                    for f in msg["files"]
+                )
+                messages_for_llm.append({
+                    "role": msg["role"],
+                    "content": f"{msg['content']}\n\nAttached files:\n{file_content}"
+                })
+            else:
+                messages_for_llm.append(msg)
+        
+        # 9.4. Добавляем результаты веб-поиска к последнему сообщению
+        if search_context:
+            messages_for_llm[-1]["content"] += search_context
+        
+        # 10. Генерируем ответ
         client = llm_client.get_client(chat["provider"])
         try:
-            # Prepare messages with file content
-            messages_with_context = []
-            for msg in history:
-                if msg.get("files"):
-                    file_content = "\n".join(
-                        f"File {f['name']} ({f['type']}): {f['content'][:1000]}..."
-                        for f in msg["files"]
-                    )
-                    messages_with_context.append({
-                        "role": msg["role"],
-                        "content": f"{msg['content']}\n\nAttached files:\n{file_content}"
-                    })
-                else:
-                    messages_with_context.append(msg)
-            
-            if search_context:
-                messages_with_context[-1]["content"] += search_context
-            
             response = client.generate_response(
-                messages=messages_with_context,
+                messages=messages_for_llm,
                 model=model
             )
             
-            # Add assistant response
+            # 11. Сохраняем ответ ассистента
             assistant_message = {"role": "assistant", "content": response}
             chat_storage.add_message(chat_id, assistant_message)
             
-            return {"response": response}
+            return {
+                "response": response,
+                "used_context": bool(context_messages),  # Показываем, был ли использован контекст
+                "web_search_performed": use_web_search
+            }
             
         except ValueError as e:
             logger.error(f"Response generation error: {str(e)}")
@@ -313,3 +356,25 @@ async def health_check(provider: str):
         return {"status": "ok", "models": bool(models)}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
+    
+@app.get("/test/embedding")
+async def test_embedding(text: str = "test text"):
+    """Тестовый эндпоинт для проверки работы эмбеддингов"""
+    try:
+        # Создаем эмбеддинг
+        embedding = llm_client.embedding_service.create_embedding(text)
+        
+        # Сохраняем в базу (используем test_chat_id для тестов)
+        test_chat_id = "test_chat_123"
+        chat_storage.save_embedding(test_chat_id, text, embedding)
+        
+        # Ищем похожие тексты
+        similar = chat_storage.find_similar_texts(embedding)
+        
+        return {
+            "original_text": text,
+            "embedding_length": len(embedding),
+            "similar_texts": similar
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
