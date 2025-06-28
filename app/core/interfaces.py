@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional, Union
-from PIL import Image
-import numpy as np
 
 class ILLMClient(ABC):
     @abstractmethod
@@ -12,6 +10,7 @@ class ILLMClient(ABC):
         max_tokens: Optional[int] = None
     ) -> str:
         pass
+    
     @abstractmethod
     def list_models(self) -> List[str]:
         pass
@@ -25,16 +24,6 @@ class IEmbeddingService(ABC):
     @abstractmethod
     def calculate_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """Вычисляет косинусную схожесть между векторами"""
-        pass
-
-
-class IFileProcessor(ABC):
-    @abstractmethod
-    def process_file(self, file_path: str) -> str:
-        pass
-    
-    @abstractmethod
-    def extract_text_from_image(self, image: Image.Image) -> str:
         pass
 
 class IWebSearch(ABC):
@@ -73,17 +62,4 @@ class IChatStorage(ABC):
     
     @abstractmethod
     def find_similar_texts(self, embedding: List[float], top_k: int = 3) -> List[Dict]:
-        pass
-
-class IFileStorage(ABC):
-    @abstractmethod
-    def save_file(self, file: bytes, filename: str) -> str:
-        pass
-    
-    @abstractmethod
-    def get_file(self, filename: str) -> bytes:
-        pass
-    
-    @abstractmethod
-    def delete_file(self, filename: str):
         pass

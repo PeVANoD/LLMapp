@@ -11,14 +11,19 @@
         </a>
         <div class="chat-title-container">
             <h1 class="chat-title">{{ chat_name }}</h1>
-            <div class="chat-actions">
-                <button id="rename-chat-btn" class="icon-button" title="Rename chat">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button id="delete-chat-btn" class="icon-button" title="Delete chat">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
+        <div class="chat-actions">
+            <button id="new-chat-btn" class="action-button new-chat-button" title="New chat">
+                <i class="fas fa-plus"></i>
+                <span>New</span>
+            </button>
+            <button id="rename-chat-btn" class="action-button rename-button" title="Rename chat">
+                <i class="fas fa-edit"></i>
+                <span>Rename</span>
+            </button>
+            <button id="delete-chat-btn" class="action-button delete-button" title="Delete chat">
+                <i class="fas fa-trash"></i>
+                <span>Delete</span>
+            </button>
         </div>
         <div class="chat-meta">
             <span class="model-badge">{{ current_model }}</span>
@@ -51,20 +56,26 @@
 
     <div class="chat-input-container">
         <div class="search-toggle">
-            <input type="checkbox" id="web-search-toggle">
+            <input type="checkbox" id="web-search-toggle"> <!-- Добавьте checked если хотите по умолчанию -->
             <label for="web-search-toggle">Web Search</label>
         </div>
         <div class="input-wrapper">
-            <div class="file-upload-buttons">
-                <label for="file-upload" class="file-upload-button" title="Upload file">
-                    <i class="fas fa-paperclip"></i>  <!-- Changed from fa-file to fa-paperclip (paperclip icon) -->
-                    <input type="file" id="file-upload" accept=".txt,.pdf,.doc,.docx,.csv" style="display: none;">
-                </label>
-                <label for="image-upload" class="file-upload-button" title="Upload image">
-                    <i class="fas fa-images"></i>  <!-- Changed from fa-image to fa-images (gallery icon) -->
-                    <input type="file" id="image-upload" accept="image/*" style="display: none;">
-                </label>
-            </div>
+        <div class="file-upload-buttons">
+        <div class="file-upload-buttons">
+            <!-- Добавьте этот input для файлов -->
+            <input type="file" id="file-upload" style="display: none;" accept=".txt,.pdf,.doc,.docx,.csv,.json">
+            <label for="file-upload" class="file-upload-button file-button" title="Upload file">
+                <i class="fas fa-file-alt"></i>
+                <span>File</span>
+            </label>
+            
+            <!-- Добавьте этот input для изображений -->
+            <input type="file" id="image-upload" style="display: none;" accept="image/*">
+            <label for="image-upload" class="file-upload-button image-button" title="Upload image">
+                <i class="fas fa-image"></i>
+                <span>Image</span>
+            </label>
+        </div>
             <textarea id="message-input" placeholder="Type your message..." rows="1"></textarea>
             <button id="send-button" class="send-button">
                 <i class="fas fa-paper-plane"></i>
@@ -94,64 +105,94 @@
         --user-message-bg: #f1f5f9;
         --assistant-message-bg: #ffffff;
     }
-    .file-upload-buttons {
+
+.chat-container {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--background);
+    height: 100vh; 
+}
+
+    /* Search container */
+    .search-container {
+        position: relative;
+        padding: 1rem;
+        background-color: var(--card-bg);
+        border-bottom: 1px solid var(--border);
         display: flex;
         gap: 0.5rem;
-        margin-right: 0.5rem;
     }
 
-    .file-upload-button {
-        width: 40px;
-        height: 40px;
-        background-color: var(--primary-light);
-        color: var(--primary);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    #global-search {
+        flex: 1;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        font-size: 0.95rem;
+    }
+
+    #search-button {
+        padding: 0 1.5rem;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius);
         cursor: pointer;
         transition: var(--transition);
     }
 
-    .file-upload-button:hover {
-        background-color: var(--primary);
-        color: white;
+    #search-button:hover {
+        background: var(--primary-dark);
     }
 
-    .uploaded-file {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem;
-        background-color: var(--primary-light);
+    .search-results {
+        position: absolute;
+        top: calc(100% + 0.5rem);
+        left: 1rem;
+        right: 1rem;
+        background: var(--card-bg);
+        border: 1px solid var(--border);
         border-radius: var(--radius);
-        margin-bottom: 0.5rem;
+        box-shadow: var(--shadow);
+        z-index: 100;
+        display: none;
+        max-height: 50vh;
+        overflow-y: auto;
     }
 
-    .uploaded-file-name {
-        flex: 1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .remove-file-btn {
-        background: none;
-        border: none;
-        color: var(--error);
+    .search-result-item {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
         cursor: pointer;
-    }
-    .chat-container {
-        max-width: 900px;
-        margin: 0 auto;
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
-        background-color: var(--background);
+        transition: var(--transition);
     }
 
+    .search-result-item:hover {
+        background: var(--primary-light);
+    }
+
+    .search-result-meta {
+        font-size: 0.8rem;
+        color: var(--text-light);
+        margin-top: 0.25rem;
+    }
+
+    .search-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.2);
+        z-index: 99;
+        display: none;
+    }
+
+    /* Chat header */
     .chat-header {
-        padding: 1.5rem;
+        padding: 1rem 1.5rem;
         background-color: var(--card-bg);
         border-bottom: 1px solid var(--border);
         position: sticky;
@@ -166,8 +207,9 @@
         color: var(--text-light);
         text-decoration: none;
         font-weight: 500;
-        margin-bottom: 1rem;
+        margin-bottom: 0.75rem;
         transition: var(--transition);
+        font-size: 0.95rem;
     }
 
     .back-button:hover {
@@ -179,6 +221,8 @@
         justify-content: space-between;
         align-items: center;
         margin-bottom: 0.5rem;
+        gap: 1rem;
+        flex-wrap: wrap;
     }
 
     .chat-title {
@@ -186,6 +230,9 @@
         font-weight: 600;
         color: var(--text);
         margin: 0;
+        word-break: break-word;
+        flex: 1;
+        min-width: 200px;
     }
 
     .chat-actions {
@@ -193,30 +240,45 @@
         gap: 0.5rem;
     }
 
-    .icon-button {
-        background: none;
-        border: none;
-        color: var(--text-lighter);
-        cursor: pointer;
-        width: 36px;
-        height: 36px;
+    .action-button {
         display: flex;
         align-items: center;
-        justify-content: center;
-        border-radius: 50%;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 0.9rem;
+        cursor: pointer;
         transition: var(--transition);
+        border: none;
     }
 
-    .icon-button:hover {
-        background-color: var(--background);
+    .action-button i {
+        font-size: 0.9rem;
     }
 
-    #rename-chat-btn:hover {
-        color: var(--primary);
+    /* Rename button */
+    .rename-button {
+        background-color: #e0f2fe;
+        color: #0369a1;
+        border: 1px solid #bae6fd;
     }
 
-    #delete-chat-btn:hover {
-        color: var(--error);
+    .rename-button:hover {
+        background-color: #bae6fd;
+        color: #075985;
+    }
+
+    /* Delete button */
+    .delete-button {
+        background-color: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
+
+    .delete-button:hover {
+        background-color: #fecaca;
+        color: #b91c1c;
     }
 
     .chat-meta {
@@ -225,6 +287,7 @@
         gap: 1rem;
         font-size: 0.875rem;
         color: var(--text-light);
+        flex-wrap: wrap;
     }
 
     .model-badge {
@@ -233,26 +296,30 @@
         padding: 0.25rem 0.75rem;
         border-radius: 20px;
         font-weight: 500;
+        white-space: nowrap;
     }
 
     .model-selector select {
-        padding: 0.25rem 0.5rem;
+        padding: 0.35rem 0.75rem;
         border: 1px solid var(--border);
         border-radius: 6px;
         background-color: var(--background);
         color: var(--text);
         font-size: 0.875rem;
+        cursor: pointer;
     }
+
 
     .chat-messages {
         flex: 1;
-        overflow-y: auto;
+        overflow-y: auto; 
         padding: 1.5rem;
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
+        scroll-behavior: smooth;
+        min-height: 0; 
     }
-
     .message {
         display: flex;
         gap: 1rem;
@@ -272,18 +339,28 @@
         width: 36px;
         height: 36px;
         border-radius: 50%;
-        background-color: var(--primary-light);
-        color: var(--primary);
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
+        font-size: 0.9rem;
+    }
+
+    .user-message .message-avatar {
+        background-color: #e0f2fe;
+        color: #0369a1;
+    }
+
+    .assistant-message .message-avatar {
+        background-color: #ecfdf5;
+        color: #059669;
     }
 
     .message-content {
         padding: 0.75rem 1rem;
         border-radius: var(--radius);
-        line-height: 1.5;
+        line-height: 1.6;
+        word-break: break-word;
     }
 
     .user-message .message-content {
@@ -297,6 +374,38 @@
         border-top-left-radius: 0;
     }
 
+    /* Message files */
+    .message-files {
+        margin-bottom: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .message-file {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .message-file img {
+        max-width: 100%;
+        max-height: 300px;
+        display: block;
+    }
+
+    .message-file pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        margin: 0;
+        font-size: 0.875rem;
+        background-color: var(--background);
+        padding: 0.75rem;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    /* Input area */
     .chat-input-container {
         padding: 1rem 1.5rem;
         background-color: var(--card-bg);
@@ -309,13 +418,14 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.75rem;
         font-size: 0.875rem;
         color: var(--text-light);
     }
 
     .input-wrapper {
         display: flex;
+        align-items: flex-end;
         gap: 0.75rem;
     }
 
@@ -328,6 +438,7 @@
         font-family: inherit;
         line-height: 1.5;
         max-height: 200px;
+        min-height: 48px;
         transition: var(--transition);
     }
 
@@ -340,6 +451,7 @@
     .send-button {
         width: 48px;
         height: 48px;
+        min-height: 48px;
         background-color: var(--primary);
         color: white;
         border: none;
@@ -349,13 +461,104 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        flex-shrink: 0;
     }
 
     .send-button:hover {
         background-color: var(--primary-dark);
-        transform: translateY(-2px);
     }
 
+    /* File upload buttons */
+    .file-upload-buttons {
+        display: flex;
+        gap: 0.5rem;
+        margin-right: 0.5rem;
+    }
+
+    .file-upload-button {
+        width: 40px;
+        height: 40px;
+        background-color: var(--primary-light);
+        color: var(--primary);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: var(--transition);
+        flex-shrink: 0;
+    }
+
+    .file-upload-button:hover {
+        background-color: var(--primary);
+        color: white;
+    }
+
+    .uploaded-file {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        background-color: var(--primary-light);
+        border-radius: var(--radius);
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    .uploaded-file-name {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .remove-file-btn {
+        background: none;
+        border: none;
+        color: var(--error);
+        cursor: pointer;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+
+    .remove-file-btn:hover {
+        background-color: rgba(239, 68, 68, 0.1);
+    }
+
+    /* Loading indicator */
+    .typing-indicator {
+        display: flex;
+        gap: 0.25rem;
+        padding: 0.5rem 0;
+    }
+
+    .typing-indicator span {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background-color: var(--text-light);
+        border-radius: 50%;
+        animation: typing 1.4s infinite ease-in-out;
+    }
+
+    .typing-indicator span:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+
+    .typing-indicator span:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+
+    @keyframes typing {
+        0%, 60%, 100% { transform: translateY(0); }
+        30% { transform: translateY(-5px); }
+    }
+
+    /* Responsive adjustments */
     @media (max-width: 768px) {
         .chat-container {
             padding: 0;
@@ -367,6 +570,7 @@
         
         .chat-messages {
             padding: 1rem;
+            gap: 1rem;
         }
         
         .message {
@@ -376,99 +580,48 @@
         .chat-input-container {
             padding: 0.75rem;
         }
-    }
-    .message-files {
-    margin-bottom: 0.5rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.5rem;
-    background-color: var(--background);
-}
-
-    .message-file {
-        margin-bottom: 0.5rem;
-    }
-
-    .message-file:last-child {
-        margin-bottom: 0;
+        
+        .chat-title-container {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+        
+        .chat-actions {
+            width: 100%;
+            justify-content: flex-end;
+        }
     }
 
-    .message-file img {
-        border-radius: 4px;
-        max-width: 100%;
-        max-height: 200px;
-    }
-
-    .message-file pre {
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        margin: 0;
-        font-size: 0.875rem;
-        background-color: var(--background);
-        padding: 0.5rem;
-        border-radius: 4px;
-        border: 1px solid var(--border);
-    }
-    .search-container {
-        position: relative;
-        margin-bottom: 1rem;
-        display: flex;
-    }
-
-    #global-search {
-        flex: 1;
-        padding: 0.75rem;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-    }
-
-    #search-button {
-        padding: 0 1rem;
-        background: var(--primary);
-        color: white;
-        border: none;
-        border-radius: 0 var(--radius) var(--radius) 0;
-        cursor: pointer;
-    }
-
-    .search-results {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        background: white;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        z-index: 100;
-        display: none;
-        max-height: 300px;
-        overflow-y: auto;
-    }
-
-    .search-result-item {
-        padding: 0.75rem;
-        border-bottom: 1px solid var(--border);
-        cursor: pointer;
-    }
-
-    .search-result-item:hover {
-        background: var(--primary-light);
-    }
-
-    .search-result-meta {
-        font-size: 0.8rem;
-        color: var(--text-light);
-    }
-    .search-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: transparent;
-        z-index: 99;
-        display: none;
+    @media (max-width: 640px) {
+        .action-button span,
+        .file-upload-button span {
+            display: none;
+        }
+        
+        .action-button,
+        .file-upload-button {
+            padding: 0.5rem;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            justify-content: center;
+        }
+        
+        .model-selector select {
+            padding: 0.25rem 0.5rem;
+        }
+        
+        .message {
+            max-width: 95%;
+            gap: 0.75rem;
+        }
+        
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            font-size: 0.8rem;
+        }
     }
 </style>
 
@@ -664,14 +817,43 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Scroll to bottom of chat
-    scrollToBottom();
+    function scrollToBottom() {
+        const chatMessages = document.getElementById('chat-messages');
+        if (!chatMessages) return;
 
-        async function sendMessage() {
+        // Вариант с плавной анимацией
+        const startTime = performance.now();
+        const duration = 300;
+        const startScrollTop = chatMessages.scrollTop;
+        const distance = chatMessages.scrollHeight - chatMessages.clientHeight - startScrollTop;
+
+        if (distance < 10) return;
+
+        function animateScroll(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const easeProgress = easeOutQuad(progress);
+            
+            chatMessages.scrollTop = startScrollTop + (distance * easeProgress);
+            
+            if (progress < 1) {
+                requestAnimationFrame(animateScroll);
+            }
+        }
+
+        function easeOutQuad(t) {
+            return t * (2 - t);
+        }
+
+        requestAnimationFrame(animateScroll);
+    }
+
+    // Функция отправки сообщения
+    async function sendMessage() {
         const message = messageInput.value.trim();
         if (!message && uploadedFiles.length === 0) return;
 
-        // Read file contents
+        // Чтение содержимого файлов
         for (const fileInfo of uploadedFiles) {
             try {
                 fileInfo.content = await readFileContent(fileInfo.file);
@@ -682,15 +864,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // Add user message to UI immediately
+        // Добавление сообщения пользователя в UI
         addMessageToUI('user', message, uploadedFiles);
         messageInput.value = '';
         messageInput.style.height = 'auto';
         
-        // Clear uploaded files UI
+        // Очистка UI загруженных файлов
         document.querySelectorAll('.uploaded-file').forEach(el => el.remove());
         
-        // Show loading indicator
+        // Показать индикатор загрузки
         const loadingId = addLoadingIndicator();
 
         try {
@@ -699,48 +881,93 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('model', modelSelect.value);
             formData.append('use_web_search', webSearchToggle.checked);
             
-            // Add files to form data
+            // Добавление файлов в FormData
             uploadedFiles.forEach((fileInfo, index) => {
-                formData.append(`files[${index}]`, fileInfo.file);
-                formData.append(`file_types[${index}]`, fileInfo.type);
+                formData.append(`files`, fileInfo.file);  // Ключ должен быть 'files'
+                formData.append(`file_types`, fileInfo.type);  // Ключ должен быть 'file_types'
             });
 
+            // Отправка запроса
             const response = await fetch(`/api/chat/{{ chat_id }}/message`, {
                 method: 'POST',
                 body: formData
             });
 
             if (!response.ok) throw new Error('Failed to get response');
-
+            console.log('Sending files:', uploadedFiles);
             const data = await response.json();
             
-            // Remove loading indicator and add assistant message
+            // Удаление индикатора загрузки и добавление ответа
             removeLoadingIndicator(loadingId);
             addMessageToUI('assistant', data.response);
             
-            // Clear uploaded files
+            // Очистка загруженных файлов
             uploadedFiles = [];
+            
+            // Прокрутка вниз после получения ответа
+            scrollToBottom();
             
         } catch (error) {
             console.error('Error:', error);
             removeLoadingIndicator(loadingId);
             addMessageToUI('assistant', "Sorry, I encountered an error. Please try again.");
+            scrollToBottom();
         }
     }
+
+    // Функция чтения содержимого файла
     function readFileContent(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = (e) => reject(new Error('File reading failed'));
-        
-        if (file.type.startsWith('image/')) {
-            reader.readAsDataURL(file); // For images, read as Data URL
-        } else {
-            reader.readAsText(file); // For text files, read as text
-        }
-    });
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(new Error('File reading failed'));
+            
+            if (file.type.startsWith('image/')) {
+                reader.readAsDataURL(file);
+            } else {
+                reader.readAsText(file);
+            }
+        });
     }
+
+    // Функция проверки нахождения внизу чата
+    function isAtBottom(threshold = 20) {
+        const chatMessages = document.getElementById('chat-messages');
+        if (!chatMessages) return true;
+        
+        return chatMessages.scrollTop + chatMessages.clientHeight >= chatMessages.scrollHeight - threshold;
+    }
+
+    // Настройка автоматической прокрутки
+    function setupAutoScroll() {
+        const chatMessages = document.getElementById('chat-messages');
+        if (!chatMessages) return;
+
+        const observer = new MutationObserver(() => {
+            if (isAtBottom(100)) {
+                scrollToBottom();
+            }
+        });
+
+        observer.observe(chatMessages, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+
+        window.addEventListener('resize', () => {
+            if (isAtBottom(100)) {
+                scrollToBottom();
+            }
+        });
+    }
+
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', () => {
+        scrollToBottom();
+        setupAutoScroll();
+    });
 
 
     function addMessageToUI(role, content, files = []) {
@@ -771,7 +998,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         messageDiv.innerHTML = `
             <div class="message-avatar">
-                <i class="fas ${role === 'user' ? 'fa-user' : 'fa-robot'}"></i>
+                <span class="avatar-label">${role === 'user' ? 'Я' : 'AI'}</span>
             </div>
             <div class="message-content">
                 ${contentHtml}
@@ -790,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         loadingDiv.innerHTML = `
             <div class="message-avatar">
-                <i class="fas fa-robot"></i>
+                <span class="avatar-label">AI</span>
             </div>
             <div class="message-content">
                 <div class="typing-indicator">
@@ -812,6 +1039,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function scrollToBottom() {
+        const chatMessages = document.getElementById('chat-messages');
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
@@ -846,5 +1074,33 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Failed to delete chat. Please try again.');
         }
     }
+    // Функция создания нового чата
+    async function createNewChat() {
+        try {
+            const response = await fetch('/api/chats', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    provider: '{{ provider }}', // используем текущего провайдера
+                    model: modelSelect.value,   // текущая выбранная модель
+                    name: 'New Chat'            // начальное имя
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                window.location.href = `/chat/${data.chat_id}`;
+            } else {
+                throw new Error('Failed to create chat');
+            }
+        } catch (error) {
+            console.error('Error creating new chat:', error);
+            alert('Failed to create new chat. Please try again.');
+        }
+    }
+    const newChatBtn = document.getElementById('new-chat-btn');
+    newChatBtn.addEventListener('click', createNewChat);
+    // Добавьте этот код в конец вашего скрипта в chat.html
+document.getElementById('new-chat-btn').addEventListener('click', createNewChat);
 });
 </script>

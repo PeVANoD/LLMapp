@@ -6,6 +6,7 @@ import logging
 from app.adapters.web_search import WebSearchService
 from app.core.services import EmbeddingService
 from app.config import Config
+from app.infrastructure.storage import SQLiteChatStorage
 
 logger = logging.getLogger(__name__)
 
@@ -94,11 +95,13 @@ class LMStudioClient:
             return []
 
 class MultiLLMClient:
-    def __init__(self):
+    def __init__(self, chat_storage: SQLiteChatStorage):
         self.clients = {
             'ollama': OllamaClient(),
             'lm_studio': LMStudioClient()
         }
+        
+        self.chat_storage = chat_storage
         self.web_search_service = WebSearchService()
         self.embedding_service = EmbeddingService()
     
@@ -119,92 +122,84 @@ class MultiLLMClient:
         return context
     
     def prepare_messages(self, 
-                    history: List[Dict],
-                    context_messages: List[Dict] = None,
-                    web_search_results: str = None,
-                    files_context: str = None) -> List[Dict]:
-        """Подготавливает полный набор сообщений для LLM с указанием языка"""
+                         history: List[Dict],
+                         files_context: str = "",
+                         use_web_search: bool = False) -> List[Dict]:
         messages = []
         
-        # 1. Системное сообщение с явным указанием языка
+        # Системное сообщение
         system_message = {
             "role": "system",
-            "content": """Ты помощник-ассистент, будешь отвечать на том же языка,
-            что и в вопросе. Чаще всего на русском. Текущий контекст диалога:"""
+            "content": "Ты помощник-ассистент. Отвечай на том же языке, что и вопрос."
         }
-        
-        if context_messages:
-            context_text = "\n".join([f"- {msg['text']}" for msg in context_messages])
-            system_message["content"] += f"\n\nСхожий контекст из других чатов:\n{context_text}"
-        
         messages.append(system_message)
         
-        # 2. История чата
+        # История чата с файлами
         for msg in history:
             content = msg["content"]
-            
-            if msg.get("files") and files_context:
-                content += f"\n\n[Прикрепленные файлы]:\n{files_context}"
-                
             messages.append({
                 "role": msg["role"],
                 "content": content
             })
         
-        # 3. Веб-поиск
-        if web_search_results and messages:
-            messages[-1]["content"] += f"\n\n[Результаты поиска]:\n{web_search_results}"
+        # Веб-поиск (если активирован)
+        if use_web_search:
+            try:
+                # Берем последний запрос пользователя
+                last_user_query = next(
+                    (m["content"] for m in reversed(history) if m["role"] == "user"), 
+                    ""
+                )
+                if last_user_query:
+                    search_results = self.perform_web_search(last_user_query)
+                    search_text = "\n".join(
+                        f"- {res['title']}: {res['snippet']}" 
+                        for res in search_results
+                    )
+                    messages[-1]["content"] += f"\n\n[Результаты поиска]:\n{search_text}"
+            except Exception as e:
+                logger.error(f"Web search error: {str(e)}")
         
         return messages
     
-    def generate_response(self,
-                     messages: List[Dict],
-                     model: str,
-                     context_messages: List[Dict] = None,
-                     web_search_results: str = None,
-                     files_context: str = None) -> str:
-        """Генерирует ответ с учетом языка пользователя"""
-        # Анализируем язык последнего сообщения пользователя
-        last_user_message = next(
-            (msg for msg in reversed(messages) if msg['role'] == 'user'),
-            None
+    def generate_response(
+        self,
+        chat_id: str,
+        model: str,
+        use_web_search: bool = False
+    ) -> str:
+        # 1. Получаем историю чата
+        history = self.chat_storage.get_history(chat_id)
+        
+        # 3. Подготавливаем сообщения для LLM
+        messages = []
+        
+        # Системное сообщение
+        messages.append({
+            "role": "system",
+            "content": "Ты помощник-ассистент. Отвечай на том же языке, что и вопрос."
+        })
+        
+        # История чата
+        for msg in history:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+        
+        # 4. Получаем информацию о чате (провайдер)
+        chat = self.chat_storage.get_chat(chat_id)
+        if not chat:
+            raise ValueError(f"Chat {chat_id} not found")
+        provider = chat["provider"]
+        
+        # 5. Выбираем клиент по провайдеру
+        client = self.get_client(provider)
+        if not client:
+            raise ValueError(f"Provider {provider} not supported")
+        
+        # 6. Генерируем ответ
+        return client.generate_response(
+            messages=messages,
+            model=model
         )
-        user_language = "ru" if last_user_message and self._is_russian(last_user_message['content']) else "en"
-        
-        prepared_messages = self.prepare_messages(
-            history=messages,
-            context_messages=context_messages,
-            web_search_results=web_search_results,
-            files_context=files_context
-        )
-        
-        # Добавляем явное указание языка в последнее системное сообщение
-        prepared_messages[0]['content'] += "\n\nТекущий язык общения: русский. Отвечай на русском."
-        
-        client = self._get_client_for_model(model)
-        return client.generate_response(prepared_messages, model)
-
-    def _is_russian(self, text: str) -> bool:
-        """Проверяет, содержит ли текст русские буквы"""
-        return any('а' <= char <= 'я' or 'А' <= char <= 'Я' for char in text)
-    
-    def _get_client_for_model(self, model: str):
-        """Определяет, какой клиент использовать для модели"""
-        for client in self.clients.values():
-            if model in client.list_models():
-                return client
-        return None
-    
-    def get_relevant_context(self, query: str, chat_id: str, top_k: int = 3) -> List[Dict]:
-        """Находит релевантные сообщения из других чатов"""
-        try:
-            embedding = self.embedding_service.create_embedding(query)
-            similar_messages = chat_storage.search_across_chats(embedding)
-            
-            # Фильтруем сообщения из текущего чата
-            return [msg for msg in similar_messages[:top_k] 
-                   if msg.get('chat_id') != chat_id]
-                    
-        except Exception as e:
-            logger.error(f"Error getting relevant context: {str(e)}")
-            return []

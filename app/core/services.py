@@ -1,5 +1,5 @@
 import uuid
-from app.core.interfaces import IEmbeddingService, IChatStorage, IFileStorage
+from app.core.interfaces import IEmbeddingService, IChatStorage
 import os
 import numpy as np
 from typing import List, Dict
@@ -91,28 +91,7 @@ class SQLiteChatStorage(IChatStorage):
     def load_from_disk(self):
         pass  # SQLite loads automatically
 
-class FileStorage(IFileStorage):
-    def __init__(self, storage_dir: str = "file_storage"):
-        self.storage_dir = storage_dir
-        os.makedirs(storage_dir, exist_ok=True)
 
-    def save_file(self, file: bytes, filename: str) -> str:
-        filepath = os.path.join(self.storage_dir, filename)
-        with open(filepath, 'wb') as f:
-            f.write(file)
-        return filepath
-
-    def get_file(self, filename: str) -> bytes:
-        filepath = os.path.join(self.storage_dir, filename)
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"File {filename} not found")
-        with open(filepath, 'rb') as f:
-            return f.read()
-
-    def delete_file(self, filename: str):
-        filepath = os.path.join(self.storage_dir, filename)
-        if os.path.exists(filepath):
-            os.remove(filepath)
 
 class EmbeddingService:
     def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):

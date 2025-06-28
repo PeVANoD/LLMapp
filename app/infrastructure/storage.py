@@ -53,6 +53,16 @@ class SQLiteChatStorage(IChatStorage):
                 FOREIGN KEY(chat_id) REFERENCES chats(chat_id)
             )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS message_files (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    message_id INTEGER NOT NULL,
+                    file_name TEXT NOT NULL,
+                    file_type TEXT NOT NULL,
+                    file_content TEXT NOT NULL,
+                    FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+                )
+            """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_chat ON embeddings(chat_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_text ON embeddings(text)")
             conn.commit()
@@ -67,6 +77,29 @@ class SQLiteChatStorage(IChatStorage):
             conn.commit()
         return chat_id
     
+    def add_message_with_file(self, chat_id: str, message: Dict, file_info: Dict):
+        """Adds message with attached file"""
+        with sqlite3.connect(self.db_path) as conn:
+            # Store message
+            cursor = conn.execute(
+                "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?) RETURNING id",
+                (chat_id, message["role"], message["content"])
+            )
+            message_id = cursor.fetchone()[0]
+            
+            # Store file
+            conn.execute(
+                """INSERT INTO message_files 
+                (message_id, file_name, file_type, file_content, image_data) 
+                VALUES (?, ?, ?, ?, ?)""",
+                (message_id, 
+                file_info["name"],
+                file_info["type"],
+                file_info["content"],
+                file_info.get("image_data"))
+            )
+            conn.commit()
+
     def rename_chat(self, chat_id: str, new_name: str):
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
@@ -84,20 +117,70 @@ class SQLiteChatStorage(IChatStorage):
 
     def add_message(self, chat_id: str, message: Dict):
         with sqlite3.connect(self.db_path) as conn:
+            # Сохраняем основное сообщение
             conn.execute(
                 "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
                 (chat_id, message["role"], message["content"])
             )
+            message_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            
+            # Сохраняем файлы, если они есть
+            if "files" in message:
+                for file_info in message["files"]:
+                    conn.execute(
+                        "INSERT INTO message_files (message_id, file_name, file_type, file_content) VALUES (?, ?, ?, ?)",
+                        (message_id,
+                        file_info["name"],
+                        file_info["type"],
+                        file_info["content"])
+                    )
             conn.commit()
+    def get_message_files(self, message_id: int) -> List[Dict]:
+        """Gets files attached to message"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT file_name, file_type, file_content, image_data FROM message_files WHERE message_id = ?",
+                (message_id,)
+            )
+            return [{
+                "name": row[0],
+                "type": row[1], 
+                "content": row[2],
+                "image_data": row[3]
+            } for row in cursor.fetchall()]
 
     def get_history(self, chat_id: str) -> List[Dict]:
         with sqlite3.connect(self.db_path) as conn:
+            # Получаем основные сообщения
             cursor = conn.execute(
-                "SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp",
+                "SELECT id, role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC",
                 (chat_id,)
             )
-            return [{"role": row[0], "content": row[1]} for row in cursor.fetchall()]
-
+            messages = []
+            for row in cursor.fetchall():
+                msg_id, role, content = row
+                message = {"id": msg_id, "role": role, "content": content}
+                
+                # Получаем прикрепленные файлы для этого сообщения
+                file_cursor = conn.execute(
+                    "SELECT file_name, file_type, file_content FROM message_files WHERE message_id = ?",
+                    (msg_id,)
+                )
+                files = []
+                for file_row in file_cursor.fetchall():
+                    files.append({
+                        "name": file_row[0],
+                        "type": file_row[1],
+                        "content": file_row[2]
+                    })
+                
+                if files:
+                    message["files"] = files
+                    
+                messages.append(message)
+                
+            return messages
+        
     def delete_chat(self, chat_id: str):
         """Удаляет чат и все связанные с ним данные (сообщения, имена, эмбеддинги)"""
         with sqlite3.connect(self.db_path) as conn:
@@ -176,6 +259,57 @@ class SQLiteChatStorage(IChatStorage):
         """No special action needed for SQLite as it's already disk-based"""
         pass
 
+    def get_chat(self, chat_id: str) -> Optional[Dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row  # This allows accessing columns by name
+            cursor = conn.execute("""
+                SELECT 
+                    c.chat_id,
+                    c.provider,
+                    c.model,
+                    datetime(c.created_at, 'localtime') as created_at,
+                    cn.name
+                FROM chats c
+                LEFT JOIN chat_names cn ON c.chat_id = cn.chat_id
+                WHERE c.chat_id = ?
+            """, (chat_id,))
+            
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "chat_id": row["chat_id"],
+                    "provider": row["provider"],
+                    "model": row["model"],
+                    "created_at": row["created_at"],
+                    "name": row["name"]
+                }
+            return None
+    def add_file_to_last_message(self, chat_id: str, file_info: Dict) -> bool:
+        """Добавляет файл к последнему сообщению в чате"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Находим ID последнего сообщения
+                cursor = conn.execute(
+                    "SELECT id FROM messages WHERE chat_id = ? ORDER BY timestamp DESC LIMIT 1",
+                    (chat_id,)
+                )
+                last_msg_id = cursor.fetchone()
+                if not last_msg_id:
+                    return False
+                
+                # Сохраняем файл
+                conn.execute(
+                    """INSERT INTO message_files 
+                    (message_id, file_name, file_type, file_content) 
+                    VALUES (?, ?, ?, ?)""",
+                    (last_msg_id[0], file_info["name"], file_info["type"], file_info["content"])
+                )
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error adding file: {str(e)}")
+            return False
+        
     def get_all_chats(self, provider: Optional[str] = None) -> List[Dict]:
         """Get all chats, optionally filtered by provider"""
         try:
@@ -253,7 +387,15 @@ class SQLiteChatStorage(IChatStorage):
         except Exception as e:
             logger.error(f"Error finding similar texts: {str(e)}")
             return []
-        
+    def get_chat(self, chat_id: str) -> Optional[Dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                "SELECT * FROM chats WHERE chat_id = ?",
+                (chat_id,)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None  
     def search_across_chats(self, query_embedding: List[float], top_k: int = 5) -> List[Dict]:
         try:
             query_embed = np.array(query_embedding, dtype=np.float32)
