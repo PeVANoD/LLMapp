@@ -106,7 +106,7 @@ class MultiLLMClient:
         self.embedding_service = EmbeddingService()
     
     def get_client(self, provider: str):
-        return self.clients.get(provider)
+        return self.clients.get(provider.lower())
     
     def perform_web_search(self, query: str) -> List[Dict]:
         return self.web_search_service.search(query)
@@ -122,30 +122,39 @@ class MultiLLMClient:
         return context
     
     def prepare_messages(self, 
-                         history: List[Dict],
-                         files_context: str = "",
-                         use_web_search: bool = False) -> List[Dict]:
+                        history: List[Dict],
+                        files_context: str = "",
+                        use_web_search: bool = False) -> List[Dict]:
         messages = []
         
-        # Системное сообщение
+        # System message
         system_message = {
             "role": "system",
             "content": "Ты помощник-ассистент. Отвечай на том же языке, что и вопрос."
         }
         messages.append(system_message)
         
-        # История чата с файлами
+        # Chat history with files
         for msg in history:
             content = msg["content"]
+            
+            # Add file content if present
+            if "files" in msg:
+                file_content = "\n".join(
+                    f"[Файл {f['name']}]:\n{f['content']}" 
+                    for f in msg["files"] 
+                    if f.get("content")
+                )
+                content = f"{content}\n\n{file_content}"
+            
             messages.append({
                 "role": msg["role"],
                 "content": content
             })
         
-        # Веб-поиск (если активирован)
+        # Web search (if enabled)
         if use_web_search:
             try:
-                # Берем последний запрос пользователя
                 last_user_query = next(
                     (m["content"] for m in reversed(history) if m["role"] == "user"), 
                     ""

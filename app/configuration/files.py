@@ -13,10 +13,19 @@ ALLOWED_FILE_TYPES = {
         'application/vnd.ms-excel',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'application/rtf',
+        'text/x-python',  # Добавьте другие текстовые типы при необходимости
     ],
     'image': [
         'image/jpeg',
         'image/png',
         'image/gif',
+        'image/webp',
     ]
+}
+
+# Дополнительно: разрешенные расширения файлов
+ALLOWED_EXTENSIONS = {
+    '.txt', '.pdf', '.doc', '.docx', '.xls', '.xlsx', 
+    '.csv', '.json', '.rtf', '.py', '.jpg', '.jpeg',
+    '.png', '.gif', '.webp'
 }

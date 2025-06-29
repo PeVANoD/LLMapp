@@ -62,11 +62,15 @@ class SQLiteChatStorage(IChatStorage):
                     file_content TEXT NOT NULL,
                     FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
                 )
-            """)
+            """)    
             conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_chat ON embeddings(chat_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_text ON embeddings(text)")
             conn.commit()
-
+        # Try to add the missing column
+        try:
+            conn.execute("ALTER TABLE message_files ADD COLUMN image_data BLOB")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
     def create_chat(self, provider: str, model: str) -> str:
         chat_id = str(uuid.uuid4())
         with sqlite3.connect(self.db_path) as conn:
@@ -124,17 +128,33 @@ class SQLiteChatStorage(IChatStorage):
             )
             message_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
             
-            # Сохраняем файлы, если они есть
-            if "files" in message:
-                for file_info in message["files"]:
+            # Надежная обработка файлов
+            files = message.get("files", [])  # Гарантированно получаем список
+            if not isinstance(files, list):  # Дополнительная проверка
+                files = []
+                
+            for file_info in files:
+                if not isinstance(file_info, dict):  # Проверяем каждый файл
+                    logger.warning(f"Invalid file info structure: {file_info}")
+                    continue
+                    
+                try:
                     conn.execute(
-                        "INSERT INTO message_files (message_id, file_name, file_type, file_content) VALUES (?, ?, ?, ?)",
+                        """INSERT INTO message_files 
+                        (message_id, file_name, file_type, file_content, image_data) 
+                        VALUES (?, ?, ?, ?, ?)""",
                         (message_id,
-                        file_info["name"],
-                        file_info["type"],
-                        file_info["content"])
+                        file_info.get("name", ""),
+                        file_info.get("type", ""),
+                        file_info.get("content", ""),
+                        file_info.get("image_data"))
                     )
+                except Exception as e:
+                    logger.error(f"Error saving file: {str(e)}")
+                    continue
+                    
             conn.commit()
+
     def get_message_files(self, message_id: int) -> List[Dict]:
         """Gets files attached to message"""
         with sqlite3.connect(self.db_path) as conn:
@@ -151,7 +171,6 @@ class SQLiteChatStorage(IChatStorage):
 
     def get_history(self, chat_id: str) -> List[Dict]:
         with sqlite3.connect(self.db_path) as conn:
-            # Получаем основные сообщения
             cursor = conn.execute(
                 "SELECT id, role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC",
                 (chat_id,)
@@ -161,7 +180,7 @@ class SQLiteChatStorage(IChatStorage):
                 msg_id, role, content = row
                 message = {"id": msg_id, "role": role, "content": content}
                 
-                # Получаем прикрепленные файлы для этого сообщения
+                # Получаем файлы и добавляем их содержимое
                 file_cursor = conn.execute(
                     "SELECT file_name, file_type, file_content FROM message_files WHERE message_id = ?",
                     (msg_id,)
@@ -171,12 +190,12 @@ class SQLiteChatStorage(IChatStorage):
                     files.append({
                         "name": file_row[0],
                         "type": file_row[1],
-                        "content": file_row[2]
+                        "content": file_row[2]  # Важно: сохраняем содержимое
                     })
                 
                 if files:
                     message["files"] = files
-                    
+                
                 messages.append(message)
                 
             return messages

@@ -16,16 +16,32 @@ from app.configuration.files import MAX_FILE_SIZE, ALLOWED_FILE_TYPES
 
 logger = logging.getLogger(__name__)
 
+# Определим типы файлов
+TEXT_CONTENT_TYPES = {
+    'text/plain',
+    'application/json',
+    'text/csv',
+    'text/x-python',
+    'application/rtf'
+}
+
+BINARY_CONTENT_TYPES = {
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.ms-powerpoint'
+}
+
 async def process_uploaded_file(file: UploadFile, file_type: str) -> dict:
-    """Обрабатывает загруженный файл и возвращает информацию о нем"""
-    # Проверка типа файла
     if file_type not in ALLOWED_FILE_TYPES:
         raise ValueError(f"Invalid file type: {file_type}")
     
     if file.content_type not in ALLOWED_FILE_TYPES[file_type]:
         raise ValueError(f"Unsupported content type: {file.content_type} for type {file_type}")
 
-    # Проверка размера файла
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
@@ -33,25 +49,49 @@ async def process_uploaded_file(file: UploadFile, file_type: str) -> dict:
     if file_size > MAX_FILE_SIZE:
         raise ValueError(f"File size {file_size} exceeds maximum allowed size {MAX_FILE_SIZE}")
 
-    # Обработка содержимого
     try:
+        content_bytes = await file.read()
+        content = ""  # По умолчанию пустое содержимое
+        
+        # Для изображений возвращаем base64
         if file_type == 'image':
-            contents = await file.read()
             import base64
-            content = f"data:{file.content_type};base64,{base64.b64encode(contents).decode('utf-8')}"
-        else:
-            # Создаем временный файл для обработки
-            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                contents = await file.read()
-                temp_file.write(contents)
-                temp_file_path = temp_file.name
-            
-            # Извлекаем текст из файла
-            extracted_text, _ = extract_text_from_file(temp_file_path, file.content_type)
-            content = extracted_text if extracted_text else "Бинарный файл, текст не извлечен"
-            
-            # Удаляем временный файл
-            os.unlink(temp_file_path)
+            content = f"data:{file.content_type};base64,{base64.b64encode(content_bytes).decode('utf-8')}"
+            return {
+                "type": file_type,
+                "name": file.filename,
+                "content": content,
+                "content_type": file.content_type,
+                "size": file_size,
+                "image_data": content_bytes
+            }
+        
+        # Для текстовых файлов определяем кодировку
+        if file.content_type in TEXT_CONTENT_TYPES:
+            detected = chardet.detect(content_bytes)
+            encoding = detected['encoding'] or 'utf-8'
+            try:
+                content = content_bytes.decode(encoding, errors='replace')
+            except Exception:
+                try:
+                    content = content_bytes.decode('utf-8', errors='replace')
+                except Exception:
+                    content = content_bytes.decode('latin-1', errors='replace')
+        
+        # Для бинарных форматов извлекаем текст
+        elif file.content_type in BINARY_CONTENT_TYPES:
+            if file.content_type in [
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/msword'
+            ]:
+                content = extract_text_from_docx_bytes(content_bytes)
+            elif file.content_type == 'application/pdf':
+                content = extract_text_from_pdf_bytes(content_bytes)
+            elif file.content_type in [
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                'application/vnd.ms-powerpoint'
+            ]:
+                content = extract_text_from_pptx_bytes(content_bytes)
         
         return {
             "type": file_type,
@@ -65,16 +105,44 @@ async def process_uploaded_file(file: UploadFile, file_type: str) -> dict:
     finally:
         await file.close()
 
-def extract_text_from_pdf(file_stream) -> str:
-    """Извлекает текст из PDF"""
+def extract_text_from_pdf_bytes(content: bytes) -> str:
+    """Извлекает текст из PDF из байтов"""
     text = ""
     try:
-        reader = PyPDF2.PdfReader(file_stream)
-        for page in reader.pages:
-            text += page.extract_text() + "\n"
+        with BytesIO(content) as bytes_io:
+            reader = PyPDF2.PdfReader(bytes_io)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
     except Exception as e:
         logger.error(f"PDF extraction error: {str(e)}", exc_info=True)
     return text
+
+def extract_text_from_docx_bytes(content: bytes) -> str:
+    """Извлекает текст из DOCX файла из байтов"""
+    try:
+        with BytesIO(content) as bytes_io:
+            doc = docx.Document(bytes_io)
+            return "\n".join([para.text for para in doc.paragraphs])
+    except Exception as e:
+        logger.error(f"DOCX extraction error: {str(e)}", exc_info=True)
+        return ""
+
+def extract_text_from_pptx_bytes(content: bytes) -> str:
+    """Извлекает текст из PPTX из байтов"""
+    try:
+        with BytesIO(content) as bytes_io:
+            prs = Presentation(bytes_io)
+            text = []
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        text.append(shape.text)
+            return "\n".join(text)
+    except Exception as e:
+        logger.error(f"PPTX extraction error: {str(e)}", exc_info=True)
+        return ""
 
 def extract_text_from_file(file_path: str, file_type: str) -> Tuple[Optional[str], Optional[bytes]]:
     """Извлекает текст из файлов различных форматов"""
@@ -86,14 +154,25 @@ def extract_text_from_file(file_path: str, file_type: str) -> Tuple[Optional[str
             text = extract_text_from_pdf(file_path)
         elif file_type == 'text/plain':
             with open(file_path, 'rb') as f:
-                content = f.read()
-                encoding = chardet.detect(content)['encoding'] or 'utf-8'
-                text = content.decode(encoding, errors='replace')
-        elif file_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                          'application/msword']:
+                content_bytes = f.read()
+                detected = chardet.detect(content_bytes)
+                encoding = detected['encoding'] or 'utf-8'
+                try:
+                    return content_bytes.decode(encoding, errors='replace'), None
+                except Exception:
+                    try:
+                        return content_bytes.decode('utf-8', errors='replace'), None
+                    except Exception:
+                        return content_bytes.decode('latin-1', errors='replace'), None
+        elif file_type in [
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/msword'
+        ]:
             text = extract_text_from_docx(file_path)
-        elif file_type in ['application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                         'application/vnd.ms-powerpoint']:
+        elif file_type in [
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.ms-powerpoint'
+        ]:
             text = extract_text_from_pptx(file_path)
         elif file_type.startswith('image/'):
             text = extract_text_from_image(file_path)
@@ -112,7 +191,9 @@ def extract_text_from_pdf(file_path: str) -> str:
         with open(file_path, 'rb') as f:
             reader = PyPDF2.PdfReader(f)
             for page in reader.pages:
-                text += page.extract_text() + "\n"
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
     except Exception as e:
         logger.error(f"PDF extraction error: {str(e)}", exc_info=True)
     return text
@@ -128,7 +209,8 @@ def extract_text_from_docx(file_path: str) -> str:
         try:
             with open(file_path, 'rb') as f:
                 content = f.read()
-                encoding = chardet.detect(content)['encoding'] or 'utf-8'
+                detected = chardet.detect(content)
+                encoding = detected['encoding'] or 'utf-8'
                 return content.decode(encoding, errors='replace')
         except Exception as fallback_e:
             logger.error(f"DOCX fallback extraction failed: {str(fallback_e)}", exc_info=True)

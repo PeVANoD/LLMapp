@@ -736,7 +736,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         e.target.value = '';
     }
-
+    function displayFileContent(file) {
+        if (file.type.startsWith('image/') && file.image_data) {
+            return `<img src="${file.image_data}" alt="${file.name}" class="file-image">`;
+        }
+        return `<pre>${file.content}</pre>`;
+    }
     function handleImageUpload(e) {
         const files = Array.from(e.target.files);
         files.forEach(file => {
