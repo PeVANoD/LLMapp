@@ -32,6 +32,10 @@ class SQLiteChatStorage(IChatStorage):
                     chat_id TEXT,
                     role TEXT,
                     content TEXT,
+                    metrics TEXT,               -- НОВЫЙ СТОЛБЕЦ
+                    processing_time REAL,       -- НОВЫЙ СТОЛБЕЦ
+                    complexity_score REAL,      -- НОВЫЙ СТОЛБЕЦ
+                    embedding_time REAL,        -- НОВЫЙ СТОЛБЕЦ
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(chat_id) REFERENCES chats(chat_id)
                 )
@@ -67,10 +71,12 @@ class SQLiteChatStorage(IChatStorage):
             conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_text ON embeddings(text)")
             conn.commit()
         # Try to add the missing column
-        try:
-            conn.execute("ALTER TABLE message_files ADD COLUMN image_data BLOB")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
+        for column in ["metrics", "processing_time", "complexity_score", "embedding_time"]:
+            try:
+                conn.execute(f"ALTER TABLE messages ADD COLUMN {column} {'TEXT' if column == 'metrics' else 'REAL'}")
+            except sqlite3.OperationalError:
+                pass  # Столбец уже существует
+
     def create_chat(self, provider: str, model: str) -> str:
         chat_id = str(uuid.uuid4())
         with sqlite3.connect(self.db_path) as conn:
@@ -154,6 +160,55 @@ class SQLiteChatStorage(IChatStorage):
                     continue
                     
             conn.commit()
+    def add_message(self, chat_id: str, message: dict) -> str:
+        """Adds message to chat with all metadata"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO messages (
+                    chat_id, 
+                    role, 
+                    content, 
+                    metrics, 
+                    processing_time, 
+                    complexity_score
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                RETURNING id
+                """,
+                (
+                    chat_id,
+                    message["role"],
+                    message["content"],
+                    json.dumps(message.get("metrics", {})),
+                    message.get("processing_time"),
+                    message.get("complexity_score")
+                )
+            )
+            message_id = cursor.fetchone()[0]
+            
+            # Handle files
+            files = message.get("files", [])
+            if not isinstance(files, list):
+                files = []
+                
+            for file_info in files:
+                if not isinstance(file_info, dict):
+                    continue
+                    
+                conn.execute(
+                    """INSERT INTO message_files 
+                    (message_id, file_name, file_type, file_content) 
+                    VALUES (?, ?, ?, ?)""",
+                    (
+                        message_id,
+                        file_info.get("name", ""),
+                        file_info.get("type", ""),
+                        file_info.get("content", "")
+                    )
+                )
+                
+            conn.commit()
+        return str(message_id)
 
     def get_message_files(self, message_id: int) -> List[Dict]:
         """Gets files attached to message"""
@@ -172,15 +227,29 @@ class SQLiteChatStorage(IChatStorage):
     def get_history(self, chat_id: str) -> List[Dict]:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
-                "SELECT id, role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC",
+                """SELECT id, role, content, metrics, processing_time, complexity_score 
+                FROM messages WHERE chat_id = ? ORDER BY timestamp ASC""",
                 (chat_id,)
             )
             messages = []
             for row in cursor.fetchall():
-                msg_id, role, content = row
-                message = {"id": msg_id, "role": role, "content": content}
+                msg_id, role, content, metrics_json, proc_time, complexity = row
+                message = {
+                    "id": msg_id, 
+                    "role": role, 
+                    "content": content,
+                    "processing_time": proc_time,
+                    "complexity_score": complexity
+                }
                 
-                # Получаем файлы и добавляем их содержимое
+                # Parse metrics JSON if exists
+                if metrics_json:
+                    try:
+                        message["metrics"] = json.loads(metrics_json)
+                    except json.JSONDecodeError:
+                        message["metrics"] = {}
+                
+                # Get files if any
                 file_cursor = conn.execute(
                     "SELECT file_name, file_type, file_content FROM message_files WHERE message_id = ?",
                     (msg_id,)
@@ -190,7 +259,7 @@ class SQLiteChatStorage(IChatStorage):
                     files.append({
                         "name": file_row[0],
                         "type": file_row[1],
-                        "content": file_row[2]  # Важно: сохраняем содержимое
+                        "content": file_row[2]
                     })
                 
                 if files:
@@ -303,6 +372,7 @@ class SQLiteChatStorage(IChatStorage):
                     "name": row["name"]
                 }
             return None
+
     def add_file_to_last_message(self, chat_id: str, file_info: Dict) -> bool:
         """Добавляет файл к последнему сообщению в чате"""
         try:
@@ -382,7 +452,7 @@ class SQLiteChatStorage(IChatStorage):
             return False
 
     def find_similar_texts(self, embedding: List[float], top_k: int = 3) -> List[Dict]:
-        """Находит наиболее похожие тексты по вектору"""
+        """Находит наиболее похожие тексты по вектору с использованием матричных операций"""
         try:
             query_embed = np.array(embedding, dtype=np.float32)
             results = []
@@ -390,22 +460,47 @@ class SQLiteChatStorage(IChatStorage):
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute("SELECT id, text, embedding FROM embeddings")
                 
-                for row_id, text, embedding_bytes in cursor.fetchall():
+                # Создаем матрицу эмбеддингов
+                all_embeddings = []
+                rows = []
+                for row in cursor.fetchall():
+                    row_id, text, embedding_bytes = row
                     try:
                         embed = np.frombuffer(embedding_bytes, dtype=np.float32)
-                        similarity = float(np.dot(query_embed, embed))
-                        results.append({"id": row_id, "text": text, "score": similarity})
-                    except Exception as e:
-                        logger.error(f"Error processing embedding: {str(e)}")
+                        all_embeddings.append(embed)
+                        rows.append((row_id, text))
+                    except Exception:
                         continue
+                
+                if not all_embeddings:
+                    return []
+                
+                # Преобразуем в матрицу
+                embedding_matrix = np.vstack(all_embeddings)
+                
+                # Нормализуем векторы
+                query_embed_norm = query_embed / np.linalg.norm(query_embed)
+                embedding_matrix_norm = embedding_matrix / np.linalg.norm(embedding_matrix, axis=1)[:, np.newaxis]
+                
+                # Вычисляем косинусную схожесть (матричное умножение)
+                similarities = np.dot(embedding_matrix_norm, query_embed_norm)
+                
+                # Получаем топ-K результатов
+                top_indices = np.argsort(similarities)[::-1][:top_k]
+                
+                for idx in top_indices:
+                    results.append({
+                        'id': rows[idx][0],
+                        'text': rows[idx][1],
+                        'score': float(similarities[idx])
+                    })
                     
-                # Сортируем по убыванию схожести
-                results.sort(key=lambda x: x['score'], reverse=True)
-                return results[:top_k]
-                    
+            return results
+                
         except Exception as e:
-            logger.error(f"Error finding similar texts: {str(e)}")
+            logger.error(f"Error in matrix similarity: {str(e)}")
             return []
+
     def get_chat(self, chat_id: str) -> Optional[Dict]:
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -415,6 +510,7 @@ class SQLiteChatStorage(IChatStorage):
             )
             row = cursor.fetchone()
             return dict(row) if row else None  
+
     def search_across_chats(self, query_embedding: List[float], top_k: int = 5) -> List[Dict]:
         try:
             query_embed = np.array(query_embedding, dtype=np.float32)

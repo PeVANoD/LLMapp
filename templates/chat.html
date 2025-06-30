@@ -1,4 +1,3 @@
-<!-- templates/chat.html -->
 <div class="chat-container">
     <div class="search-container">
         <input type="text" id="global-search" placeholder="Search across all chats...">
@@ -11,18 +10,22 @@
         </a>
         <div class="chat-title-container">
             <h1 class="chat-title">{{ chat_name }}</h1>
-        <div class="chat-actions">
-            <button id="new-chat-btn" class="action-button new-chat-button" title="New chat">
-                <i class="fas fa-plus"></i>
-                <span>New</span>
-            </button>
-            <button id="rename-chat-btn" class="action-button rename-button" title="Rename chat">
-                <i class="fas fa-edit"></i>
-                <span>Rename</span>
-            </button>
-            <button id="delete-chat-btn" class="action-button delete-button" title="Delete chat">
-                <i class="fas fa-trash"></i>
-                <span>Delete</span>
+            <div class="chat-actions">
+                <button id="new-chat-btn" class="action-button new-chat-button" title="New chat">
+                    <i class="fas fa-plus"></i>
+                    <span>New</span>
+                </button>
+                <button id="rename-chat-btn" class="action-button rename-button" title="Rename chat">
+                    <i class="fas fa-edit"></i>
+                    <span>Rename</span>
+                </button>
+                <button id="delete-chat-btn" class="action-button delete-button" title="Delete chat">
+                    <i class="fas fa-trash"></i>
+                    <span>Delete</span>
+                </button>
+            </div>
+            <button id="show-stats-btn" class="action-button">
+                <i class="fas fa-chart-bar"></i> Stats
             </button>
         </div>
         <div class="chat-meta">
@@ -36,7 +39,22 @@
             </div>
         </div>
     </div>
-
+    <div class="interpretation">
+        <div class="interpretation-header">
+            <h4>How to interpret these metrics:</h4>
+            <button id="toggle-interpretation" class="toggle-btn">Hide</button>
+        </div>
+        <ul class="interpretation-content">
+            <li><strong>Efficiency Ratio</strong> - processing time per complexity point (lower is better)</li>
+            <li><strong>Correlation</strong> - relationship between complexity and processing time:
+                <ul>
+                    <li>> 0.7: Strong positive correlation (complex processing)</li>
+                    <li>-0.3 to 0.3: No significant correlation</li>
+                    <li>< -0.7: Strong negative correlation (optimized processing)</li>
+                </ul>
+            </li>
+        </ul>
+    </div>
     <div class="chat-messages" id="chat-messages">
         {% for message in history %}
         <div class="message {% if message.role == 'user' %}user-message{% else %}assistant-message{% endif %}">
@@ -60,29 +78,68 @@
             <label for="web-search-toggle">Web Search</label>
         </div>
         <div class="input-wrapper">
-        <div class="file-upload-buttons">
-        <div class="file-upload-buttons">
-            <!-- Добавьте этот input для файлов -->
-            <input type="file" id="file-upload" style="display: none;" accept=".txt,.pdf,.doc,.docx,.csv,.json">
-            <label for="file-upload" class="file-upload-button file-button" title="Upload file">
-                <i class="fas fa-file-alt"></i>
-                <span>File</span>
-            </label>
-            
-            <!-- Добавьте этот input для изображений -->
-            <input type="file" id="image-upload" style="display: none;" accept="image/*">
-            <label for="image-upload" class="file-upload-button image-button" title="Upload image">
-                <i class="fas fa-image"></i>
-                <span>Image</span>
-            </label>
-        </div>
+            <div class="file-upload-buttons">
+                <input type="file" id="file-upload" style="display: none;" accept=".txt,.pdf,.doc,.docx,.csv,.json">
+                <label for="file-upload" class="file-upload-button file-button" title="Upload file">
+                    <i class="fas fa-file-alt"></i>
+                    <span>File</span>
+                </label>
+                
+                <input type="file" id="image-upload" style="display: none;" accept="image/*">
+                <label for="image-upload" class="file-upload-button image-button" title="Upload image">
+                    <i class="fas fa-image"></i>
+                    <span>Image</span>
+                </label>
+            </div>
             <textarea id="message-input" placeholder="Type your message..." rows="1"></textarea>
             <button id="send-button" class="send-button">
                 <i class="fas fa-paper-plane"></i>
             </button>
         </div>
     </div>
-<!-- Вот сюда вставляем overlay -->
+    
+    <!-- Модальное окно со статистикой -->
+    <div id="stats-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Text Analytics</h3>
+            <div class="stats-container">
+                <!-- Карточка с общими метриками чата -->
+                <div class="stat-card">
+                    <h4>Chat Metrics</h4>
+                    <div id="chat-metrics">
+                        <!-- Сюда будут загружены метрики через JavaScript -->
+                        <div class="loading-metrics">Loading metrics...</div>
+                    </div>
+                </div>
+                
+                <!-- Карточка с метриками эффективности -->
+                <div class="stat-card">
+                    <h4>Processing Efficiency</h4>
+                    <div class="metrics-table">
+                        <div class="metric-row">
+                            <span class="metric-label">Avg. Efficiency Ratio:</span>
+                            <span class="metric-value" id="efficiency-ratio">N/A</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Complexity-Time Correlation:</span>
+                            <span class="metric-value" id="efficiency-correlation">N/A</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Карточка с графиком сложности сообщений -->
+                <div class="stat-card">
+                    <h4>Message Complexity</h4>
+                    <div id="message-metrics-chart">
+                        <!-- Сюда будет загружен график через JavaScript -->
+                        <canvas id="complexity-chart-canvas"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="search-overlay" id="search-overlay"></div>
 </div> <!-- закрывающий тег для chat-container -->
 
@@ -132,7 +189,14 @@
         border-radius: var(--radius);
         font-size: 0.95rem;
     }
-
+    .toggle-btn {
+        background: none;
+        border: none;
+        color: #4361ee;
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 5px 10px;
+    }
     #search-button {
         padding: 0 1.5rem;
         background: var(--primary);
@@ -224,7 +288,20 @@
         gap: 1rem;
         flex-wrap: wrap;
     }
+    .modal .close {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        font-size: 24px;
+        font-weight: bold;
+        cursor: pointer;
+        color: #333;
+        z-index: 10;
+    }
 
+    .modal .close:hover {
+        color: #000;
+    }
     .chat-title {
         font-size: 1.5rem;
         font-weight: 600;
@@ -239,7 +316,40 @@
         display: flex;
         gap: 0.5rem;
     }
+    .error-notification {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #fee2e2;
+        color: #b91c1c;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 1000;
+        max-width: 90%;
+        width: 500px;
+        animation: slideIn 0.3s ease-out;
+    }
 
+    .error-content {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .error-close {
+        background: none;
+        border: none;
+        color: inherit;
+        cursor: pointer;
+        margin-left: auto;
+    }
+
+    @keyframes slideIn {
+        from { bottom: -50px; opacity: 0; }
+        to { bottom: 20px; opacity: 1; }
+    }
     .action-button {
         display: flex;
         align-items: center;
@@ -319,6 +429,21 @@
         gap: 1.5rem;
         scroll-behavior: smooth;
         min-height: 0; 
+    }
+    .metric-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+    }
+
+    .metric-label {
+        font-weight: 500;
+    }
+
+    .metric-value {
+        font-weight: 600;
+        color: #4361ee;
     }
     .message {
         display: flex;
@@ -428,7 +553,11 @@
         align-items: flex-end;
         gap: 0.75rem;
     }
-
+    .interpretation-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
     #message-input {
         flex: 1;
         padding: 0.75rem 1rem;
@@ -535,7 +664,46 @@
         gap: 0.25rem;
         padding: 0.5rem 0;
     }
+    
+    .modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    }
 
+    .modal-content {
+        background-color: #fff;
+        margin: 5% auto;
+        padding: 20px;
+        border-radius: 8px;
+        width: 80%;
+        max-width: 900px;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+
+    .stats-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    .stat-card {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    #file-stats-chart, #text-metrics-chart {
+        height: 300px;
+        margin-top: 15px;
+    }
     .typing-indicator span {
         display: inline-block;
         width: 8px;
@@ -624,7 +792,7 @@
         }
     }
 </style>
-
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const chatMessages = document.getElementById('chat-messages');
@@ -637,8 +805,32 @@ document.addEventListener('DOMContentLoaded', function() {
     const fileUpload = document.getElementById('file-upload');
     const imageUpload = document.getElementById('image-upload');
     const searchOverlay = document.getElementById('search-overlay');
+    const toggleBtn = document.getElementById('toggle-interpretation');
+    const content = document.querySelector('.interpretation-content');
     let uploadedFiles = [];
+    const modal = document.getElementById('stats-modal');
+    const closeBtn = modal.querySelector('.close');
+        closeBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+        // Восстановление состояния из localStorage
+    const isHidden = localStorage.getItem('interpretationHidden') === 'true';
+    content.style.display = isHidden ? 'none' : 'block';
+    toggleBtn.textContent = isHidden ? 'Show' : 'Hide';
 
+    toggleBtn.addEventListener('click', function() {
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? 'block' : 'none';
+        toggleBtn.textContent = isHidden ? 'Hide' : 'Show';
+        localStorage.setItem('interpretationHidden', !isHidden);
+    });
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleGlobalError);
+    window.addEventListener('click', function(event) {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
     // Инициализация поиска
     document.getElementById('search-button').addEventListener('click', function() {
         const query = document.getElementById('global-search').value.trim();
@@ -647,7 +839,191 @@ document.addEventListener('DOMContentLoaded', function() {
             showSearchResults();
         }
     });
-
+    function handleGlobalError(event) {
+        let message = 'An unexpected error occurred';
+        
+        if (event instanceof ErrorEvent) {
+            message = event.error.message || event.message;
+        } else if (event instanceof PromiseRejectionEvent) {
+            message = event.reason.message || String(event.reason);
+        }
+        
+        showErrorNotification(message);
+        console.error('Global error:', event);
+    }
+    function showErrorNotification(message) {
+        // Проверяем, не существует ли уже уведомление
+        if (document.getElementById('error-notification')) return;
+        
+        const notification = document.createElement('div');
+        notification.id = 'error-notification';
+        notification.className = 'error-notification';
+        notification.innerHTML = `
+            <div class="error-content">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>${message}</span>
+                <button class="error-close"><i class="fas fa-times"></i></button>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Автоматическое скрытие через 5 секунд
+        setTimeout(() => {
+            notification.remove();
+        }, 5000);
+        
+        // Ручное закрытие
+        notification.querySelector('.error-close').addEventListener('click', () => {
+            notification.remove();
+        });
+    }
+document.getElementById('show-stats-btn').addEventListener('click', async () => {
+    modal.style.display = 'block';
+    try {
+        const metricsResponse = await fetch(`/api/chat/{{ chat_id }}/metrics`);
+        const metricsData = await metricsResponse.json();
+        
+        renderChatMetrics(metricsData.chat_metrics);
+        renderMessageMetricsChart(metricsData.message_metrics);
+        
+        // Update efficiency metrics
+        document.getElementById('efficiency-ratio').textContent = 
+            metricsData.chat_metrics.efficiency_ratio !== null ? 
+            metricsData.chat_metrics.efficiency_ratio.toFixed(4) : 'N/A';
+            
+        document.getElementById('efficiency-correlation').textContent = 
+            metricsData.chat_metrics.correlation !== null ? 
+            metricsData.chat_metrics.correlation.toFixed(2) : 'N/A';
+        
+    } catch (error) {
+        console.error('Failed to load metrics:', error);
+        document.getElementById('chat-metrics').innerHTML = '<p>Error loading metrics</p>';
+    }
+});
+    function renderChatMetrics(metrics) {
+        const container = document.getElementById('chat-metrics');
+        
+        // Проверка и форматирование метрик эффективности
+        const efficiencyRatio = (metrics.efficiency_ratio !== null && !isNaN(metrics.efficiency_ratio))
+            ? metrics.efficiency_ratio.toFixed(4)
+            : 'N/A';
+        
+        const correlation = (metrics.correlation !== null && !isNaN(metrics.correlation))
+            ? metrics.correlation.toFixed(2)
+            : 'N/A';
+        
+        container.innerHTML = `
+            <div class="metric-item">
+                <span class="metric-label">Total Words:</span>
+                <span class="metric-value">${metrics.word_count}</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Unique Words:</span>
+                <span class="metric-value">${metrics.unique_word_count}</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Lexical Diversity:</span>
+                <span class="metric-value">${(metrics.lexical_diversity * 100).toFixed(1)}%</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Avg. Word Length:</span>
+                <span class="metric-value">${metrics.avg_word_length.toFixed(2)}</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Efficiency Ratio:</span>
+                <span class="metric-value">${efficiencyRatio}</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Complexity-Time Correlation:</span>
+                <span class="metric-value">${correlation}</span>
+            </div>
+        `;
+    }
+    // Исправленная функция renderMessageMetricsChart
+    function renderMessageMetricsChart(metrics) {
+        try {
+            const ctx = document.getElementById('message-metrics-chart');
+            ctx.innerHTML = '<canvas></canvas>';
+            
+            const userMessages = metrics.filter(m => m.role === 'user');
+            const assistantMessages = metrics.filter(m => m.role === 'assistant');
+            
+            new Chart(ctx.querySelector('canvas'), {
+                type: 'bar',
+                data: {
+                    labels: ['Word Count', 'Unique Words', 'Complexity'],
+                    datasets: [
+                        {
+                            label: 'User Messages',
+                            data: [
+                                avg(userMessages, 'word_count'),
+                                avg(userMessages, 'unique_word_count'),  // Исправлено
+                                avg(userMessages, 'complexity_score')     // Исправлено
+                            ],
+                            backgroundColor: 'rgba(54, 162, 235, 0.5)'
+                        },
+                        {
+                            label: 'Assistant Messages',
+                            data: [
+                                avg(assistantMessages, 'word_count'),
+                                avg(assistantMessages, 'unique_word_count'),  // Исправлено
+                                avg(assistantMessages, 'complexity_score')    // Исправлено
+                            ],
+                            backgroundColor: 'rgba(75, 192, 192, 0.5)'
+                        }
+                    ]
+                },
+                options: {
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+            
+            function avg(items, prop) {
+                const sum = items.reduce((acc, item) => acc + item.metrics[prop], 0);
+                return sum / items.length || 0;
+            }
+        } catch (error) {
+        console.error('Chart rendering error:', error);
+        document.getElementById('message-metrics-chart').innerHTML = 
+            '<p class="error">Error rendering chart. Check console for details.</p>';
+        }
+    }
+    function renderTextMetricsChart(metrics) {
+        const ctx = document.getElementById('text-metrics-chart');
+        if (!ctx) return;
+        
+        ctx.innerHTML = '<canvas></canvas>';
+        const canvas = ctx.querySelector('canvas');
+        const context = canvas.getContext('2d');
+        
+        new Chart(context, {
+            type: 'radar',
+            data: {
+            labels: ['Word Count', 'Unique Words', 'Readability', 'Complexity'],
+            datasets: [{
+                label: 'Text Metrics',
+                data: [
+                metrics.word_count / 100, 
+                metrics.unique_words / 50,
+                metrics.readability_score,
+                metrics.avg_word_length
+                ],
+                backgroundColor: 'rgba(75, 192, 192, 0.2)'
+            }]
+            },
+            options: {
+            scales: {
+                r: {
+                beginAtZero: true,
+                max: 100
+                }
+            }
+            }
+        });
+    }
     document.getElementById('global-search').addEventListener('keyup', function(e) {
         if (e.key === 'Enter') {
             const query = document.getElementById('global-search').value.trim();
@@ -668,9 +1044,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('search-results').style.display = 'none';
         searchOverlay.style.display = 'none';
     }
-
-    // Обработчик клика по оверлею
-    searchOverlay.addEventListener('click', hideSearchResults);
 
     async function searchMessages(query) {
         if (!query) {
@@ -913,8 +1286,10 @@ document.addEventListener('DOMContentLoaded', function() {
             scrollToBottom();
             
         } catch (error) {
-            console.error('Error:', error);
+            showErrorNotification(`Failed to send message: ${error.message}`);
             removeLoadingIndicator(loadingId);
+            console.error('Message sending error:', error);
+            console.error('Error:', error);
             addMessageToUI('assistant', "Sorry, I encountered an error. Please try again.");
             scrollToBottom();
         }
@@ -1062,6 +1437,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Error renaming chat:', error);
             alert('Failed to rename chat. Please try again.');
+            showErrorNotification(`Failed to rename chat: ${error.message}`);
         }
     }
 
@@ -1106,6 +1482,152 @@ document.addEventListener('DOMContentLoaded', function() {
     const newChatBtn = document.getElementById('new-chat-btn');
     newChatBtn.addEventListener('click', createNewChat);
     // Добавьте этот код в конец вашего скрипта в chat.html
-document.getElementById('new-chat-btn').addEventListener('click', createNewChat);
+    document.getElementById('new-chat-btn').addEventListener('click', createNewChat);
+    document.getElementById('show-stats-btn').addEventListener('click', async () => {
+        modal.style.display = 'block';
+        try {
+            const metricsResponse = await fetch(`/api/chat/{{ chat_id }}/metrics`);
+            const metricsData = await metricsResponse.json();
+            renderChatMetrics(metricsData.chat_metrics);
+            
+            try {
+                renderMessageMetricsChart(metricsData.message_metrics);
+            } catch (chartError) {
+                console.error('Chart error:', chartError);
+                document.getElementById('message-metrics-chart').innerHTML = 
+                    '<p>Error rendering metrics chart</p>';
+            }
+        } catch (error) {
+            console.error('Metrics load error:', error);
+            document.getElementById('chat-metrics').innerHTML = 
+                '<p>Error loading metrics. Try again later.</p>';
+        }
+    });
+    function renderComplexityTimeChart(data) {
+        const ctx = document.getElementById('complexity-time-chart');
+        new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: Object.keys(data).map(file_type => ({
+                    label: file_type,
+                    data: data[file_type].map(entry => ({
+                        x: entry.complexity,
+                        y: entry.time * 1000 // в миллисекундах
+                    })),
+                    pointRadius: 8,
+                    pointHoverRadius: 10
+                }))
+            },
+            options: {
+                scales: {
+                    x: { 
+                        title: { display: true, text: 'Complexity Score' } 
+                    },
+                    y: {
+                        title: { display: true, text: 'Processing Time (ms)' }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const ratio = ctx.raw.z;
+                                return [
+                                    `Type: ${ctx.dataset.label}`,
+                                    `Complexity: ${ctx.parsed.x.toFixed(1)}`,
+                                    `Time: ${ctx.parsed.y.toFixed(1)}ms`,
+                                    `Ratio: ${ratio.toFixed(4)} ms/point`
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    function renderFileComplexityTable(stats) {
+        const table = document.createElement('table');
+        table.className = 'stats-table';
+        
+        table.innerHTML = `
+        <thead>
+            <tr>
+                <th>File Type</th>
+                <th>Avg Time (ms)</th>
+                <th>Avg Complexity</th>
+                <th>Efficiency Ratio</th>
+                <th>Correlation</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${Object.entries(stats).map(([type, s]) => `
+            <tr>
+                <td>${type}</td>
+                <td>${(s.time_stats.mean * 1000).toFixed(1)}</td>
+                <td>${s.complexity_stats.mean.toFixed(1)}</td>
+                <td>${s.efficiency.mean_ratio.toFixed(4)}</td>
+                <td>${s.correlation.toFixed(2)}</td>
+            </tr>
+            `).join('')}
+        </tbody>
+        `;
+        
+        document.getElementById('file-complexity-table').appendChild(table);
+    }
+    async function loadComplexityStats() {
+        const response = await fetch('/api/benchmark/complexity_vs_time');
+        const data = await response.json();
+        renderComplexityTimeChart(data);
+        
+        const statsResponse = await fetch('/api/benchmark/file_complexity');
+        const stats = await statsResponse.json();
+        renderFileComplexityTable(stats);
+    }
+    function renderFileStatsChart(stats) {
+        const ctx = document.getElementById('file-stats-chart');
+        if (!ctx) return;
+        // Проверка наличия данных
+        if (!stats || Object.keys(stats).length === 0) {
+            ctx.innerHTML = '<p>No statistics available yet. Process files to generate data.</p>';
+            return;
+        }
+        // Очищаем предыдущий график
+        ctx.innerHTML = '<canvas></canvas>';
+        const canvas = ctx.querySelector('canvas');
+        const context = canvas.getContext('2d');
+        
+        // Подготовка данных
+        const labels = Object.keys(stats).filter(k => stats[k]);
+        const means = labels.map(label => stats[label].mean * 1000);
+        
+        new Chart(context, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Average Processing Time (ms)',
+                    data: means,
+                    backgroundColor: [
+                        'rgba(54, 162, 235, 0.5)',
+                        'rgba(255, 99, 132, 0.5)',
+                        'rgba(75, 192, 192, 0.5)',
+                        'rgba(153, 102, 255, 0.5)',
+                        'rgba(255, 159, 64, 0.5)'
+                    ]
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Milliseconds'
+                        }
+                    }
+                }
+            }
+        });
+    }
 });
 </script>

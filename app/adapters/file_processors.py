@@ -13,17 +13,9 @@ import pandas as pd
 from io import BytesIO
 import chardet
 from app.configuration.files import MAX_FILE_SIZE, ALLOWED_FILE_TYPES
+from app.utils.benchmark import benchmark
 
 logger = logging.getLogger(__name__)
-
-# Определим типы файлов
-TEXT_CONTENT_TYPES = {
-    'text/plain',
-    'application/json',
-    'text/csv',
-    'text/x-python',
-    'application/rtf'
-}
 
 BINARY_CONTENT_TYPES = {
     'application/pdf',
@@ -35,6 +27,7 @@ BINARY_CONTENT_TYPES = {
     'application/vnd.ms-powerpoint'
 }
 
+@benchmark.time_it('text')
 async def process_uploaded_file(file: UploadFile, file_type: str) -> dict:
     if file_type not in ALLOWED_FILE_TYPES:
         raise ValueError(f"Invalid file type: {file_type}")
@@ -67,7 +60,7 @@ async def process_uploaded_file(file: UploadFile, file_type: str) -> dict:
             }
         
         # Для текстовых файлов определяем кодировку
-        if file.content_type in TEXT_CONTENT_TYPES:
+        if file.content_type in ALLOWED_FILE_TYPES:
             detected = chardet.detect(content_bytes)
             encoding = detected['encoding'] or 'utf-8'
             try:
@@ -92,19 +85,23 @@ async def process_uploaded_file(file: UploadFile, file_type: str) -> dict:
                 'application/vnd.ms-powerpoint'
             ]:
                 content = extract_text_from_pptx_bytes(content_bytes)
-        
+        text_metrics = {}
+        if content:
+            from app.utils.text_metrics import calculate_text_metrics
+            text_metrics = calculate_text_metrics(content)
         return {
             "type": file_type,
             "name": file.filename,
             "content": content,
             "content_type": file.content_type,
-            "size": file_size
+            "size": file_size,
+            "metrics": text_metrics
         }
     except Exception as e:
         raise ValueError(f"Error processing file: {str(e)}")
     finally:
         await file.close()
-
+@benchmark.time_it('pdf')
 def extract_text_from_pdf_bytes(content: bytes) -> str:
     """Извлекает текст из PDF из байтов"""
     text = ""
@@ -119,6 +116,7 @@ def extract_text_from_pdf_bytes(content: bytes) -> str:
         logger.error(f"PDF extraction error: {str(e)}", exc_info=True)
     return text
 
+@benchmark.time_it('docx')
 def extract_text_from_docx_bytes(content: bytes) -> str:
     """Извлекает текст из DOCX файла из байтов"""
     try:
@@ -128,7 +126,8 @@ def extract_text_from_docx_bytes(content: bytes) -> str:
     except Exception as e:
         logger.error(f"DOCX extraction error: {str(e)}", exc_info=True)
         return ""
-
+    
+@benchmark.time_it('pptx')
 def extract_text_from_pptx_bytes(content: bytes) -> str:
     """Извлекает текст из PPTX из байтов"""
     try:
@@ -229,7 +228,7 @@ def extract_text_from_pptx(file_path: str) -> str:
     except Exception as e:
         logger.error(f"PPTX extraction error: {str(e)}", exc_info=True)
         return ""
-
+@benchmark.time_it('image')
 def extract_text_from_image(file_path: str) -> str:
     """Извлекает текст из изображения с помощью OCR"""
     try:

@@ -62,8 +62,11 @@ class LMStudioClient:
     def __init__(self):
         self.base_url = Config.LM_STUDIO_URL
 
-    def generate_response(self, messages: List[Dict], model: str, **kwargs) -> str:
+    def generate_response(self, chat_id: str, message: str, model: str, use_web_search: bool = False, history: List[Dict] = None, **kwargs) -> str:
         try:
+            # Convert history to messages format if needed
+            messages = history if history else [{"role": "user", "content": message}]
+            
             response = requests.post(
                 f"{self.base_url}/v1/chat/completions",
                 json={
@@ -170,31 +173,32 @@ class MultiLLMClient:
                 logger.error(f"Web search error: {str(e)}")
         
         return messages
-    
+        
     def generate_response(
         self,
         chat_id: str,
+        messages: List[Dict],  # This should be used instead of history
         model: str,
         use_web_search: bool = False
     ) -> str:
-        # 1. Получаем историю чата
-        history = self.chat_storage.get_history(chat_id)
+        # Get chat info
+        chat = self.chat_storage.get_chat(chat_id)
+        if not chat:
+            raise ValueError(f"Chat {chat_id} not found")
+        provider = chat["provider"]
         
-        # 3. Подготавливаем сообщения для LLM
-        messages = []
+        # Get the client
+        client = self.get_client(provider)
+        if not client:
+            raise ValueError(f"Provider {provider} not supported")
         
-        # Системное сообщение
-        messages.append({
-            "role": "system",
-            "content": "Ты помощник-ассистент. Отвечай на том же языке, что и вопрос."
-        })
-        
-        # История чата
-        for msg in history:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
+        # Generate response - pass messages directly
+        response = client.generate_response(
+            messages=messages,
+            model=model,
+            use_web_search=use_web_search
+        )
+        return response
         
         # 4. Получаем информацию о чате (провайдер)
         chat = self.chat_storage.get_chat(chat_id)
@@ -208,7 +212,7 @@ class MultiLLMClient:
             raise ValueError(f"Provider {provider} not supported")
         
         # 6. Генерируем ответ
-        return client.generate_response(
-            messages=messages,
-            model=model
+        response = client.generate_response(
+            chat_id=chat_id,
+            messages=history  # Заменяем history на messages
         )
