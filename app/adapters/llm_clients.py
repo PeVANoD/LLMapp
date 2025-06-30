@@ -1,4 +1,3 @@
-# app/adapters/llm_clients.py
 import json
 from typing import List, Dict, Optional
 import requests
@@ -62,18 +61,19 @@ class LMStudioClient:
     def __init__(self):
         self.base_url = Config.LM_STUDIO_URL
 
-    def generate_response(self, chat_id: str, message: str, model: str, use_web_search: bool = False, history: List[Dict] = None, **kwargs) -> str:
+    def generate_response(self, messages: List[Dict], model: str, **kwargs) -> str:
         try:
-            # Convert history to messages format if needed
-            messages = history if history else [{"role": "user", "content": message}]
-            
+            # Параметры по умолчанию
+            temperature = kwargs.get('temperature', 0.7)
+            max_tokens = kwargs.get('max_tokens', Config.DEFAULT_MAX_TOKENS)
+
             response = requests.post(
                 f"{self.base_url}/v1/chat/completions",
                 json={
                     "model": model,
                     "messages": messages,
-                    "temperature": kwargs.get("temperature", 0.7),
-                    "max_tokens": kwargs.get("max_tokens", Config.DEFAULT_MAX_TOKENS),
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
                     "stream": False
                 },
                 timeout=120
@@ -111,8 +111,9 @@ class MultiLLMClient:
     def get_client(self, provider: str):
         return self.clients.get(provider.lower())
     
-    def perform_web_search(self, query: str) -> List[Dict]:
-        return self.web_search_service.search(query)
+    def perform_web_search(self, query: str, force_duckduckgo: bool = False) -> List[Dict]:
+        """Perform web search optionally forcing DuckDuckGo"""
+        return self.web_search_service.search(query, force_duckduckgo)
     
     def format_context(self, similar_messages: List[Dict]) -> str:
         """Форматирует контекст для LLM"""
@@ -126,7 +127,6 @@ class MultiLLMClient:
     
     def prepare_messages(self, 
                         history: List[Dict],
-                        files_context: str = "",
                         use_web_search: bool = False) -> List[Dict]:
         messages = []
         
@@ -168,7 +168,9 @@ class MultiLLMClient:
                         f"- {res['title']}: {res['snippet']}" 
                         for res in search_results
                     )
-                    messages[-1]["content"] += f"\n\n[Результаты поиска]:\n{search_text}"
+                    # Добавляем результаты поиска к последнему сообщению пользователя
+                    if messages and messages[-1]["role"] == "user":
+                        messages[-1]["content"] += f"\n\n[Результаты поиска]:\n{search_text}"
             except Exception as e:
                 logger.error(f"Web search error: {str(e)}")
         
@@ -177,42 +179,53 @@ class MultiLLMClient:
     def generate_response(
         self,
         chat_id: str,
-        messages: List[Dict],  # This should be used instead of history
+        message: str,
         model: str,
-        use_web_search: bool = False
+        use_web_search: bool = False,
+        history: Optional[List[Dict]] = None,
+        files: Optional[List] = None,
+        **kwargs
     ) -> str:
-        # Get chat info
+        # Если включен веб-поиск, используем только DuckDuckGo
+        if use_web_search:
+            search_results = self.perform_web_search(message, force_duckduckgo=True)
+            
+            if not search_results:
+                return "По вашему запросу не найдено информации в интернете."
+            
+            # Форматируем результаты поиска в ответ
+            response = "Вот что я нашел в интернете:\n\n"
+            for i, result in enumerate(search_results[:3], 1):
+                response += f"{i}. **{result['title']}**\n"
+                response += f"   {result['snippet']}\n"
+                response += f"   [Источник]({result['link']})\n\n"
+            return response
+
+        # Оригинальная логика с нейросетью
+        full_history = history.copy() if history else []
+        current_message = {"role": "user", "content": message}
+        
+        if files:
+            current_message["files"] = files
+            
+        full_history.append(current_message)
+        
+        messages = self.prepare_messages(
+            history=full_history,
+            use_web_search=False  # Отключаем веб-поиск для нейросети
+        )
+        
         chat = self.chat_storage.get_chat(chat_id)
         if not chat:
             raise ValueError(f"Chat {chat_id} not found")
         provider = chat["provider"]
         
-        # Get the client
         client = self.get_client(provider)
         if not client:
             raise ValueError(f"Provider {provider} not supported")
         
-        # Generate response - pass messages directly
-        response = client.generate_response(
+        return client.generate_response(
             messages=messages,
             model=model,
-            use_web_search=use_web_search
-        )
-        return response
-        
-        # 4. Получаем информацию о чате (провайдер)
-        chat = self.chat_storage.get_chat(chat_id)
-        if not chat:
-            raise ValueError(f"Chat {chat_id} not found")
-        provider = chat["provider"]
-        
-        # 5. Выбираем клиент по провайдеру
-        client = self.get_client(provider)
-        if not client:
-            raise ValueError(f"Provider {provider} not supported")
-        
-        # 6. Генерируем ответ
-        response = client.generate_response(
-            chat_id=chat_id,
-            messages=history  # Заменяем history на messages
+            **kwargs
         )

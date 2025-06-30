@@ -2,14 +2,19 @@ import requests
 from typing import List, Dict
 import logging
 from app.config import Config
-from duckduckgo_search import DDGS  # Updated import
+from duckduckgo_search import DDGS
 
 logger = logging.getLogger(__name__)
 
 class WebSearchService:
-    def search(self, query: str) -> List[Dict]:
-        """Perform web search and return results"""
+    def search(self, query: str, force_duckduckgo: bool = False) -> List[Dict]:
+        """Perform web search and return results with DuckDuckGo fallback"""
         try:
+            # Всегда используем DuckDuckGo если принудительно включен
+            if force_duckduckgo:
+                return self._search_with_duckduckgo(query)
+                
+            # Иначе используем конфигурацию из настроек
             if Config.USE_DUCKDUCKGO:
                 return self._search_with_duckduckgo(query)
             else:

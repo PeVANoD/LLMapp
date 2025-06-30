@@ -437,12 +437,13 @@ async def add_message(
         # Generate response using the correct client method
         response_start = time.perf_counter()
         client = llm_client.get_client(chat["provider"])
-        response = client.generate_response(
+        response = llm_client.generate_response(
             chat_id=chat_id,
             message=full_content,
             model=model,
             use_web_search=use_web_search,
-            history=history
+            history=history,
+            files=file_infos  # Добавьте эту строку
         )
         response_time = time.perf_counter() - response_start
         
@@ -551,9 +552,11 @@ async def upload_file(
         client = llm_client.get_client_for_chat(chat_id)
         response = client.generate_response(
             chat_id=chat_id,
-            messages=history,  # Pass history as messages
+            message=message,  # Добавить текущее сообщение
             model=model,
-            use_web_search=use_web_search
+            use_web_search=use_web_search,
+            history=history,
+            files=file_info  # Добавить информацию о файлах
         )
         
         assistant_message = {"role": "assistant", "content": response}

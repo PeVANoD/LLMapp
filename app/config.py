@@ -19,7 +19,7 @@ class Config:
     DEFAULT_MAX_TOKENS = 2048
     DEFAULT_MODEL = "mistral"  # Теперь используем mistral по умолчанию
     # Web search settings
-    WEB_SEARCH_ENABLED = False
+    WEB_SEARCH_ENABLED = True
     
     @classmethod
     def update_config(cls, **kwargs):
